@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function LandingTop() {
   const modules = [
     {
@@ -56,18 +58,21 @@ export default function LandingTop() {
         </nav>
 
         <div className="flex items-center gap-4">
-          <a
-            href="#login"
+          {/* ✅ CHANGED ONLY THIS: Log In */}
+          <Link
+            href="/auth"
             className="text-sm font-semibold text-slate-700 hover:text-slate-900"
           >
             Log In
-          </a>
-          <a
-            href="#get-started"
+          </Link>
+
+          {/* ✅ CHANGED ONLY THIS: Get Started */}
+          <Link
+            href="/auth"
             className="rounded-xl bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 px-5 py-2.5 text-sm font-extrabold text-white shadow-sm hover:opacity-95"
           >
             Get Started
-          </a>
+          </Link>
         </div>
       </header>
 
@@ -76,7 +81,6 @@ export default function LandingTop() {
         <div className="relative">
           <div className="absolute inset-0 bg-gradient-to-br from-teal-100 via-cyan-100 to-sky-100" />
           <div className="absolute inset-0 opacity-40 [background:radial-gradient(circle_at_50%_30%,rgba(45,212,191,0.35),transparent_55%)]" />
-
           <div className="relative mx-auto max-w-6xl px-6 pb-14 pt-10">
             <div className="mx-auto max-w-4xl text-center">
               <div className="mx-auto inline-flex items-center gap-2 rounded-full bg-white/60 px-4 py-2 text-sm font-semibold text-teal-700 ring-1 ring-teal-200/60 backdrop-blur">
@@ -96,8 +100,9 @@ export default function LandingTop() {
               </h1>
 
               <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-lg">
-                BrainUp helps SME employees track emotions, build self-awareness, and grow their EI
-                skills through gamified learning and personalised insights.
+                BrainUp helps SME employees track emotions, build self-awareness,
+                and grow their EI skills through gamified learning and personalised
+                insights.
               </p>
 
               <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
@@ -107,7 +112,6 @@ export default function LandingTop() {
                 >
                   Start Your Journey <span aria-hidden>→</span>
                 </a>
-
                 <a
                   href="#features"
                   className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white/60 px-10 py-3 font-extrabold text-slate-900 shadow-sm backdrop-blur hover:bg-white"
@@ -124,7 +128,6 @@ export default function LandingTop() {
               </div>
             </div>
           </div>
-
           <div className="h-12 bg-gradient-to-b from-transparent to-[#f8fbfb]" />
         </div>
       </section>
@@ -135,17 +138,15 @@ export default function LandingTop() {
           <div className="mx-auto inline-flex rounded-full bg-teal-50 px-5 py-2 text-sm font-extrabold text-teal-700 ring-1 ring-teal-200/60">
             Core Modules
           </div>
-
           <h2 className="mt-6 text-4xl font-extrabold tracking-tight sm:text-5xl">
             Everything You Need for{" "}
             <span className="bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 bg-clip-text text-transparent">
               Emotional Growth
             </span>
           </h2>
-
           <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-slate-600">
-            BrainUp combines powerful features designed specifically for SME workplaces to build
-            healthier, more emotionally intelligent teams.
+            BrainUp combines powerful features designed specifically for SME
+            workplaces to build healthier, more emotionally intelligent teams.
           </p>
         </div>
 
@@ -159,8 +160,9 @@ export default function LandingTop() {
                 {m.icon}
               </div>
               <h3 className="mt-6 text-lg font-extrabold">{m.title}</h3>
-              <p className="mt-3 text-sm leading-relaxed text-slate-600">{m.desc}</p>
-              {/* ✅ removed Learn more link */}
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                {m.desc}
+              </p>
             </div>
           ))}
         </div>
@@ -174,10 +176,9 @@ export default function LandingTop() {
               Ready to Transform Your <br className="hidden sm:block" />
               Workplace Well-being?
             </h3>
-
             <p className="mx-auto mt-4 max-w-2xl text-sm text-white/90 sm:text-base">
-              Join forward-thinking SMEs investing in emotional intelligence and building healthier
-              work environments.
+              Join forward-thinking SMEs investing in emotional intelligence and
+              building healthier work environments.
             </p>
 
             {/* ✅ pills row restored */}
@@ -219,8 +220,8 @@ export default function LandingTop() {
             </div>
 
             <p className="mt-4 text-sm leading-relaxed text-slate-600">
-              Empowering SME employees with emotional intelligence tools for a healthier, more
-              productive workplace.
+              Empowering SME employees with emotional intelligence tools for a
+              healthier, more productive workplace.
             </p>
 
             <div className="mt-5 space-y-2 text-sm text-slate-600">
