@@ -1,7 +1,7 @@
+// app/api/auth/signup/route.ts
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { hashInvite, getEmailDomain, isAllowedDomain } from "@/lib/inviteHash";
 import { createClient } from "@supabase/supabase-js";
+import { hashInvite, isAllowedDomain } from "@/lib/inviteHash";
 
 type ReqBody = {
   full_name: string;
@@ -12,11 +12,6 @@ type ReqBody = {
   inviteCode?: string;
 };
 
-const supabaseAnon = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as ReqBody;
@@ -25,107 +20,95 @@ export async function POST(req: Request) {
     const department = (body.department || "").trim();
     const email = (body.email || "").trim().toLowerCase();
     const password = body.password || "";
-    const role = body.role || "EMPLOYEE";
+    const role = body.role;
     const inviteCode = (body.inviteCode || "").trim();
 
-    if (!full_name || !email || !password) {
-      return NextResponse.json({ ok: false, message: "Missing fields." }, { status: 400 });
+    // basic validation
+    if (!full_name || !email || !password || !role) {
+      return NextResponse.json(
+        { ok: false, message: "Kindly complete all fields before continuing." },
+        { status: 400 }
+      );
     }
 
-    const domain = getEmailDomain(email);
-    if (!isAllowedDomain(domain)) {
-      return NextResponse.json({ ok: false, message: "Use your company email." }, { status: 400 });
+    // domain check (for BOTH employee and HR)
+    if (!isAllowedDomain(email)) {
+      return NextResponse.json(
+        { ok: false, message: "Please use an allowed email domain." },
+        { status: 400 }
+      );
     }
 
-    let finalRole: "EMPLOYEE" | "HR" = "EMPLOYEE";
-    let inviteId: string | null = null;
-
+    // HR invite code check
     if (role === "HR") {
       if (!inviteCode) {
-        return NextResponse.json({ ok: false, message: "HR invite code required." }, { status: 400 });
+        return NextResponse.json(
+          { ok: false, message: "HR Invite Code is required." },
+          { status: 400 }
+        );
       }
 
-      const code_hash = hashInvite(inviteCode);
-
-      const { data: invite, error: invErr } = await supabaseAdmin
-        .from("invite_codes")
-        .select("id, active, allowed_domain, max_uses, used_count, expires_at")
-        .eq("code_hash", code_hash)
-        .maybeSingle();
-
-      if (invErr || !invite) {
-        return NextResponse.json({ ok: false, message: "Invalid invite code." }, { status: 400 });
+      const expected = (process.env.HR_INVITE_HASH || "").trim();
+      if (!expected) {
+        return NextResponse.json(
+          { ok: false, message: "HR invite configuration missing on server." },
+          { status: 500 }
+        );
       }
 
-      if (!invite.active) {
-        return NextResponse.json({ ok: false, message: "Invite code inactive." }, { status: 400 });
+      const hashed = hashInvite(inviteCode);
+      if (hashed !== expected) {
+        return NextResponse.json(
+          { ok: false, message: "Wrong HR Invite Code" },
+          { status: 400 }
+        );
       }
-
-      if (invite.expires_at && new Date(invite.expires_at).getTime() < Date.now()) {
-        return NextResponse.json({ ok: false, message: "Invite code expired." }, { status: 400 });
-      }
-
-      if (invite.allowed_domain && invite.allowed_domain.toLowerCase() !== domain) {
-        return NextResponse.json({ ok: false, message: "Invite not valid for this company." }, { status: 400 });
-      }
-
-      if (invite.used_count >= invite.max_uses) {
-        return NextResponse.json({ ok: false, message: "Invite code already used." }, { status: 400 });
-      }
-
-      await supabaseAdmin
-        .from("invite_codes")
-        .update({ used_count: invite.used_count + 1 })
-        .eq("id", invite.id);
-
-      finalRole = "HR";
-      inviteId = invite.id;
     }
 
-    const origin = new URL(req.url).origin;
+    // Employee must have department, HR should not require it
+    if (role === "EMPLOYEE" && !department) {
+      return NextResponse.json(
+        { ok: false, message: "Department is required for Employee." },
+        { status: 400 }
+      );
+    }
 
-    const { data: signUpData, error: signUpErr } =
-      await supabaseAnon.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${origin}/auth/callback`,
+    // ✅ Use ANON signUp so Supabase sends verification email automatically
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    const supabase = createClient(url, anon);
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        // store extra fields inside auth.user_metadata
+        data: {
+          full_name,
+          role,
+          department: role === "EMPLOYEE" ? department : null,
         },
-      });
-
-    if (signUpErr || !signUpData.user) {
-      return NextResponse.json({ ok: false, message: signUpErr?.message || "Signup failed." }, { status: 400 });
-    }
-
-    const userId = signUpData.user.id;
-
-    const { error: profErr } = await supabaseAdmin
-      .from("profiles")
-      .insert({
-        id: userId,
-        full_name,
-        work_email: email,
-        department,
-        role: finalRole,
-      });
-
-    if (profErr) {
-      return NextResponse.json({ ok: false, message: "Profile creation failed." }, { status: 500 });
-    }
-
-    if (inviteId) {
-      await supabaseAdmin.from("invite_redemptions").insert({
-        invite_id: inviteId,
-        user_id: userId,
-      });
-    }
-
-    return NextResponse.json({
-      ok: true,
-      message: "Account created. Please verify your email to continue.",
+      },
     });
 
-  } catch (error) {
-    return NextResponse.json({ ok: false, message: "Server error." }, { status: 500 });
+    if (error) {
+      return NextResponse.json({ ok: false, message: error.message }, { status: 400 });
+    }
+
+    // If email confirmations are ON, user must verify via email before login works fully.
+    return NextResponse.json(
+      {
+        ok: true,
+        message: "Account created! Please check your email to verify your account.",
+        userId: data.user?.id ?? null,
+      },
+      { status: 200 }
+    );
+  } catch (e: any) {
+    return NextResponse.json(
+      { ok: false, message: e?.message || "Server error" },
+      { status: 500 }
+    );
   }
 }
+

@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
+import { Eye, EyeOff } from "lucide-react";
 
 type Role = "EMPLOYEE" | "HR";
+type InviteStatus = "IDLE" | "CHECKING" | "VALID" | "INVALID";
 
 export default function AuthPage() {
   const router = useRouter();
@@ -14,6 +16,7 @@ export default function AuthPage() {
   // login
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPw, setLoginPw] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
 
   // signup
   const [role, setRole] = useState<Role>("EMPLOYEE");
@@ -23,13 +26,116 @@ export default function AuthPage() {
   const [signPw, setSignPw] = useState("");
   const [inviteCode, setInviteCode] = useState("");
 
-  const [msg, setMsg] = useState<string | null>(null);
+  // ✅ split messages so they don't carry over
+  const [loginMsg, setLoginMsg] = useState<string | null>(null);
+  const [signupMsg, setSignupMsg] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(false);
+
+  // password visibility toggles
+  const [showLoginPw, setShowLoginPw] = useState(false);
+  const [showSignPw, setShowSignPw] = useState(false);
+
+  // ✅ HR invite validation state
+  const [inviteStatus, setInviteStatus] = useState<InviteStatus>("IDLE");
+  const [inviteHint, setInviteHint] = useState<string | null>(null);
+  const debounceRef = useRef<number | null>(null);
+
+  const isHrLocked =
+    role === "HR" && (inviteStatus !== "VALID" || !inviteCode.trim());
+
+  // ============================
+  // Password strength (SIGNUP)
+  // ============================
+  const pwRules = useMemo(() => {
+    const pw = signPw || "";
+    return {
+      minLen: pw.length >= 8,
+      upper: /[A-Z]/.test(pw),
+      lower: /[a-z]/.test(pw),
+      number: /[0-9]/.test(pw),
+      symbol: /[^A-Za-z0-9]/.test(pw),
+    };
+  }, [signPw]);
+
+  const pwScore = useMemo(
+    () => Object.values(pwRules).filter(Boolean).length,
+    [pwRules]
+  );
+
+  function pwBarColor() {
+    if (pwScore <= 2) return "bg-red-500";
+    if (pwScore <= 4) return "bg-yellow-500";
+    return "bg-green-500";
+  }
+
+  function canSignup() {
+    // require all rules true
+    return pwScore === 5;
+  }
+
+  // ✅ HR invite: instant validation (debounced) while typing
+  useEffect(() => {
+    // only relevant for signup+HR
+    if (mode !== "signup" || role !== "HR") {
+      setInviteStatus("IDLE");
+      setInviteHint(null);
+      return;
+    }
+
+    const code = inviteCode.trim();
+    if (!code) {
+      setInviteStatus("IDLE");
+      setInviteHint(null);
+      return;
+    }
+
+    // debounce
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+
+    debounceRef.current = window.setTimeout(async () => {
+      setInviteStatus("CHECKING");
+      setInviteHint("Checking invite code...");
+
+      try {
+        const res = await fetch("/api/auth/validate-hr-invite", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ inviteCode: code }),
+        });
+
+        const data = await res.json();
+
+        if (!data.ok) {
+          setInviteStatus("INVALID");
+          setInviteHint(data.message || "Wrong HR Invite Code, Retry");
+          return;
+        }
+
+        setInviteStatus("VALID");
+        setInviteHint("Invite verified ✅");
+      } catch {
+        setInviteStatus("INVALID");
+        setInviteHint("Could not validate invite. Try again.");
+      }
+    }, 450);
+
+    return () => {
+      if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    };
+  }, [inviteCode, role, mode]);
 
   async function onLogin(e: React.FormEvent) {
     e.preventDefault();
-    setMsg(null);
+    setLoginMsg(null);
     setLoading(true);
+
+    // ✅ custom validation message BEFORE Supabase
+    if (!loginEmail.trim() || !loginPw.trim()) {
+      setLoginMsg("Please enter your email and password.");
+      setLoading(false);
+      return;
+    }
 
     const { error } = await supabase.auth.signInWithPassword({
       email: loginEmail.trim().toLowerCase(),
@@ -39,8 +145,24 @@ export default function AuthPage() {
     setLoading(false);
 
     if (error) {
-      setMsg(error.message);
+      setLoginMsg(error.message);
       return;
+    }
+
+    // "Remember me" best-effort:
+    // Supabase persists session by default. If user unchecks rememberMe,
+    // we clear the stored session after successful login so it won't survive browser restart.
+    if (!rememberMe) {
+      try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith("sb-") && k.includes("-auth-token")) {
+            localStorage.removeItem(k);
+          }
+        }
+      } catch {
+        // ignore
+      }
     }
 
     router.push("/post-login");
@@ -48,7 +170,30 @@ export default function AuthPage() {
 
   async function onSignup(e: React.FormEvent) {
     e.preventDefault();
-    setMsg(null);
+    setSignupMsg(null);
+
+    // ✅ HR must validate invite first
+    if (role === "HR") {
+      if (!inviteCode.trim()) {
+        setSignupMsg("Please enter HR Invite Code.");
+        return;
+      }
+      if (inviteStatus === "CHECKING") {
+        setSignupMsg("Please wait, verifying invite code...");
+        return;
+      }
+      if (inviteStatus !== "VALID") {
+        setSignupMsg("Wrong HR Invite Code, Retry");
+        return;
+      }
+    }
+
+    // ✅ enforce strong password
+    if (!canSignup()) {
+      setSignupMsg("Kindly complete all fields before continuing");
+      return;
+    }
+
     setLoading(true);
 
     const res = await fetch("/api/auth/signup", {
@@ -68,11 +213,32 @@ export default function AuthPage() {
     setLoading(false);
 
     if (!data.ok) {
-      setMsg(data.message || "Signup failed.");
+      setSignupMsg(data.message || "Signup failed.");
       return;
     }
 
-    setMsg(data.message);
+    setSignupMsg(data.message);
+  }
+
+  async function onForgotPassword() {
+    setLoginMsg(null);
+
+    const email = loginEmail.trim().toLowerCase();
+    if (!email) {
+      setLoginMsg("Please enter your email first, then click “Forgot password?”.");
+      return;
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback`,
+    });
+
+    if (error) {
+      setLoginMsg(error.message);
+      return;
+    }
+
+    setLoginMsg("Password reset email sent. Please check your inbox.");
   }
 
   return (
@@ -125,7 +291,11 @@ export default function AuthPage() {
                 {/* tabs */}
                 <div className="mt-6 flex gap-2">
                   <button
-                    onClick={() => setMode("login")}
+                    onClick={() => {
+                      setMode("login");
+                      setLoginMsg(null);
+                      setSignupMsg(null);
+                    }}
                     className={`flex-1 rounded-xl px-4 py-2 text-sm font-bold ${
                       mode === "login"
                         ? "bg-slate-900 text-white"
@@ -135,7 +305,11 @@ export default function AuthPage() {
                     Login
                   </button>
                   <button
-                    onClick={() => setMode("signup")}
+                    onClick={() => {
+                      setMode("signup");
+                      setLoginMsg(null);
+                      setSignupMsg(null);
+                    }}
                     className={`flex-1 rounded-xl px-4 py-2 text-sm font-bold ${
                       mode === "signup"
                         ? "bg-slate-900 text-white"
@@ -146,10 +320,15 @@ export default function AuthPage() {
                   </button>
                 </div>
 
-                {/* message */}
-                {msg && (
+                {/* message (separate per tab) */}
+                {mode === "login" && loginMsg && (
                   <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                    {msg}
+                    {loginMsg}
+                  </div>
+                )}
+                {mode === "signup" && signupMsg && (
+                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                    {signupMsg}
                   </div>
                 )}
 
@@ -168,17 +347,51 @@ export default function AuthPage() {
                       />
                     </div>
 
+                    {/* login password with icon toggle */}
                     <div>
                       <label className="text-sm font-bold text-slate-700">
                         Password
                       </label>
-                      <input
-                        type="password"
-                        value={loginPw}
-                        onChange={(e) => setLoginPw(e.target.value)}
-                        className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-300"
-                        placeholder="Enter your password"
-                      />
+                      <div className="mt-2 relative">
+                        <input
+                          type={showLoginPw ? "text" : "password"}
+                          value={loginPw}
+                          onChange={(e) => setLoginPw(e.target.value)}
+                          className="w-full rounded-xl border border-slate-200 px-4 py-3 pr-12 outline-none focus:ring-2 focus:ring-cyan-300"
+                          placeholder="Enter your password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowLoginPw((v) => !v)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
+                          aria-label={
+                            showLoginPw ? "Hide password" : "Show password"
+                          }
+                        >
+                          {showLoginPw ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Remember me + Forgot password row */}
+                    <div className="flex items-center justify-between text-sm">
+                      <label className="flex items-center gap-2 text-slate-600 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={rememberMe}
+                          onChange={(e) => setRememberMe(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-cyan-500 focus:ring-cyan-400"
+                        />
+                        Remember me
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={onForgotPassword}
+                        className="font-semibold text-cyan-600 hover:text-cyan-700"
+                      >
+                        Forgot password?
+                      </button>
                     </div>
 
                     <button
@@ -197,7 +410,13 @@ export default function AuthPage() {
                       <div className="mt-2 flex gap-2">
                         <button
                           type="button"
-                          onClick={() => setRole("EMPLOYEE")}
+                          onClick={() => {
+                            setRole("EMPLOYEE");
+                            setInviteCode("");
+                            setInviteStatus("IDLE");
+                            setInviteHint(null);
+                            setSignupMsg(null);
+                          }}
                           className={`flex-1 rounded-xl border px-4 py-3 text-sm font-bold ${
                             role === "EMPLOYEE"
                               ? "border-cyan-400 bg-cyan-50 text-slate-900"
@@ -208,7 +427,10 @@ export default function AuthPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setRole("HR")}
+                          onClick={() => {
+                            setRole("HR");
+                            setSignupMsg(null);
+                          }}
                           className={`flex-1 rounded-xl border px-4 py-3 text-sm font-bold ${
                             role === "HR"
                               ? "border-cyan-400 bg-cyan-50 text-slate-900"
@@ -231,6 +453,20 @@ export default function AuthPage() {
                           className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-300"
                           placeholder="Enter invite code"
                         />
+
+                        {inviteHint && (
+                          <div
+                            className={`mt-2 text-sm font-semibold ${
+                              inviteStatus === "VALID"
+                                ? "text-green-700"
+                                : inviteStatus === "INVALID"
+                                ? "text-red-600"
+                                : "text-slate-600"
+                            }`}
+                          >
+                            {inviteHint}
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -239,9 +475,10 @@ export default function AuthPage() {
                         Full Name
                       </label>
                       <input
+                        disabled={isHrLocked}
                         value={fullName}
                         onChange={(e) => setFullName(e.target.value)}
-                        className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-300"
+                        className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-300 disabled:bg-slate-100 disabled:text-slate-500"
                         placeholder="John Doe"
                       />
                     </div>
@@ -251,9 +488,10 @@ export default function AuthPage() {
                         Work Email
                       </label>
                       <input
+                        disabled={isHrLocked}
                         value={signEmail}
                         onChange={(e) => setSignEmail(e.target.value)}
-                        className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-300"
+                        className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-300 disabled:bg-slate-100 disabled:text-slate-500"
                         placeholder="you@company.com"
                       />
                     </div>
@@ -272,21 +510,53 @@ export default function AuthPage() {
                       </div>
                     )}
 
+                    {/* signup password with icon toggle */}
                     <div>
                       <label className="text-sm font-bold text-slate-700">
                         Password
                       </label>
-                      <input
-                        type="password"
-                        value={signPw}
-                        onChange={(e) => setSignPw(e.target.value)}
-                        className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-300"
-                        placeholder="Create a strong password"
-                      />
+                      <div className="mt-2 relative">
+                        <input
+                          disabled={isHrLocked}
+                          type={showSignPw ? "text" : "password"}
+                          value={signPw}
+                          onChange={(e) => setSignPw(e.target.value)}
+                          className="w-full rounded-xl border border-slate-200 px-4 py-3 pr-12 outline-none focus:ring-2 focus:ring-cyan-300 disabled:bg-slate-100 disabled:text-slate-500"
+                          placeholder="Create a strong password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowSignPw((v) => !v)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
+                          aria-label={
+                            showSignPw ? "Hide password" : "Show password"
+                          }
+                        >
+                          {showSignPw ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
+
+                      {/* Strength meter */}
+                      <div className="mt-3">
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                          <div
+                            className={`h-full ${pwBarColor()} transition-all`}
+                            style={{ width: `${(pwScore / 5) * 100}%` }}
+                          />
+                        </div>
+
+                        <div className="mt-2 grid gap-1 text-xs">
+                          <Rule ok={pwRules.minLen} text="Min 8 characters" />
+                          <Rule ok={pwRules.upper} text="Uppercase letter (A-Z)" />
+                          <Rule ok={pwRules.lower} text="Lowercase letter (a-z)" />
+                          <Rule ok={pwRules.number} text="Number (0-9)" />
+                          <Rule ok={pwRules.symbol} text="Symbol (!@#$...)" />
+                        </div>
+                      </div>
                     </div>
 
                     <button
-                      disabled={loading}
+                      disabled={loading || isHrLocked}
                       className="mt-2 w-full rounded-xl bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 px-6 py-3 text-sm font-extrabold text-white shadow-sm disabled:opacity-60"
                     >
                       {loading ? "Creating..." : "Create Account →"}
@@ -319,6 +589,23 @@ export default function AuthPage() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Rule({ ok, text }: { ok: boolean; text: string }) {
+  return (
+    <div
+      className={`flex items-center gap-2 ${
+        ok ? "text-green-700" : "text-slate-500"
+      }`}
+    >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${
+          ok ? "bg-green-600" : "bg-slate-300"
+        }`}
+      />
+      <span>{text}</span>
     </div>
   );
 }
