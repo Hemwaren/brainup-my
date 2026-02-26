@@ -1,8 +1,6 @@
-@import "tailwindcss";
+@import "tailwindcss";  /* Simple base so everything renders clean */
 
-/* Simple base so everything renders clean */
-html,
-body {
+html, body {
   height: 100%;
 }
 

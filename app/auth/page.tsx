@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Brain } from "lucide-react";
 
 type Role = "EMPLOYEE" | "HR";
 type InviteStatus = "IDLE" | "CHECKING" | "VALID" | "INVALID";
@@ -270,14 +270,19 @@ export default function AuthPage() {
               style={{ transformStyle: "preserve-3d" }}
               className="w-full max-w-md"
             >
-              {/* keep your existing content inside here */}
               <div className="w-full max-w-md">
-                <div className="flex items-center gap-3">
+                {/* ✅ logo clickable back to landing */}
+                <button
+                  type="button"
+                  onClick={() => router.push("/")}
+                  className="flex items-center gap-3"
+                  aria-label="Back to landing page"
+                >
                   <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white shadow-sm">
-                    <span>🧠</span>
+                    <Brain className="h-5 w-5" />
                   </div>
                   <div className="text-lg font-extrabold">BrainUp</div>
-                </div>
+                </button>
 
                 <h1 className="mt-8 text-3xl font-extrabold text-slate-900">
                   {mode === "login" ? "Welcome back" : "Create your account"}
@@ -347,7 +352,6 @@ export default function AuthPage() {
                       />
                     </div>
 
-                    {/* login password with icon toggle */}
                     <div>
                       <label className="text-sm font-bold text-slate-700">
                         Password
@@ -373,7 +377,6 @@ export default function AuthPage() {
                       </div>
                     </div>
 
-                    {/* Remember me + Forgot password row */}
                     <div className="flex items-center justify-between text-sm">
                       <label className="flex items-center gap-2 text-slate-600 cursor-pointer select-none">
                         <input
@@ -510,7 +513,6 @@ export default function AuthPage() {
                       </div>
                     )}
 
-                    {/* signup password with icon toggle */}
                     <div>
                       <label className="text-sm font-bold text-slate-700">
                         Password
@@ -536,7 +538,6 @@ export default function AuthPage() {
                         </button>
                       </div>
 
-                      {/* Strength meter */}
                       <div className="mt-3">
                         <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
                           <div
@@ -577,7 +578,8 @@ export default function AuthPage() {
         >
           <div className="text-center text-white px-10">
             <div className="mx-auto grid h-20 w-20 place-items-center rounded-3xl bg-white/20 backdrop-blur">
-              <span className="text-3xl">🧠</span>
+              {/* ✅ ONLY CHANGED HERO EMOJI */}
+              <Brain className="h-9 w-9 text-white" />
             </div>
             <h2 className="mt-8 text-4xl font-extrabold">
               Grow Your Emotional Intelligence

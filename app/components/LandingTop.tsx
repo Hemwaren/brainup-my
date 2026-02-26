@@ -1,34 +1,47 @@
 import Link from "next/link";
+import React from "react";
+import {
+  Brain,
+  ShieldCheck,
+  NotebookPen,
+  Trophy,
+  BarChart3,
+  LayoutDashboard,
+  Sparkles,
+  Mail,
+  Phone,
+  MapPin,
+} from "lucide-react";
 
 export default function LandingTop() {
   const modules = [
     {
-      icon: "🛡️",
+      icon: ShieldCheck,
       title: "User Authentication",
       desc: "Secure login, profile management, and role-based access for employees, HR, and admins.",
     },
     {
-      icon: "🧠",
+      icon: Brain,
       title: "EI Learning Hub",
       desc: "Take EI assessments, view scores, track progress, and access curated learning resources.",
     },
     {
-      icon: "📓",
+      icon: NotebookPen,
       title: "Journaling Module",
       desc: "Reflect on emotions with private journal entries and daily motivational quotes.",
     },
     {
-      icon: "🏆",
+      icon: Trophy,
       title: "Gamification",
       desc: "Complete daily missions, earn XP, unlock badges, and track your journey roadmap.",
     },
     {
-      icon: "📊",
+      icon: BarChart3,
       title: "HR Management",
       desc: "View team emotion insights, filter by department, and schedule HRBP consultations.",
     },
     {
-      icon: "🧩",
+      icon: LayoutDashboard,
       title: "Admin Dashboard",
       desc: "Manage users, system settings, and mental health support directory.",
     },
@@ -39,8 +52,8 @@ export default function LandingTop() {
       {/* NAV */}
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
         <div className="flex items-center gap-3">
-          <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white shadow-sm">
-            <span className="text-lg">🧠</span>
+          <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white shadow-sm shadow-[0_0_18px_rgba(34,211,238,0.35)]">
+            <Brain className="h-6 w-6" />
           </div>
           <span className="text-xl font-extrabold tracking-tight">BrainUp</span>
         </div>
@@ -58,7 +71,6 @@ export default function LandingTop() {
         </nav>
 
         <div className="flex items-center gap-4">
-          {/* ✅ CHANGED ONLY THIS: Log In */}
           <Link
             href="/auth"
             className="text-sm font-semibold text-slate-700 hover:text-slate-900"
@@ -66,7 +78,6 @@ export default function LandingTop() {
             Log In
           </Link>
 
-          {/* ✅ CHANGED ONLY THIS: Get Started */}
           <Link
             href="/auth"
             className="rounded-xl bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 px-5 py-2.5 text-sm font-extrabold text-white shadow-sm hover:opacity-95"
@@ -84,7 +95,7 @@ export default function LandingTop() {
           <div className="relative mx-auto max-w-6xl px-6 pb-14 pt-10">
             <div className="mx-auto max-w-4xl text-center">
               <div className="mx-auto inline-flex items-center gap-2 rounded-full bg-white/60 px-4 py-2 text-sm font-semibold text-teal-700 ring-1 ring-teal-200/60 backdrop-blur">
-                <span>✨</span>
+                <Sparkles className="h-4 w-4" />
                 <span>Emotional Intelligence for SMEs</span>
               </div>
 
@@ -92,9 +103,21 @@ export default function LandingTop() {
                 <span className="text-slate-900">Boost Your Team&apos;s</span>
                 <br />
                 <span className="relative inline-block">
-                  <span className="bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 bg-clip-text text-transparent">
+                  {/* shimmer using inline animation (server-safe) */}
+                  <span
+                    className="bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 bg-[length:220%_220%] bg-clip-text text-transparent"
+                    style={{
+                      animation: "brainupShimmer 3s ease-in-out infinite alternate",
+                      backgroundPosition: "0% 50%",
+                    }}
+                  >
                     Emotional Intelligence
                   </span>
+
+                  {/* inline keyframes via style attribute on a hidden element is NOT possible,
+                      so we use CSS variables trick: Next.js allows inline @keyframes only in global CSS.
+                      To stay server-safe with no extra files, we simulate shimmer by shifting bg-position
+                      using an animation name that is defined in your global css (below). */}
                   <span className="pointer-events-none absolute -bottom-2 left-0 h-[6px] w-full rounded-full bg-teal-300/40" />
                 </span>
               </h1>
@@ -139,9 +162,10 @@ export default function LandingTop() {
             Core Modules
           </div>
           <h2 className="mt-6 text-4xl font-extrabold tracking-tight sm:text-5xl">
-            Everything You Need for{" "}
+            Everything You Need for         {" "}
             <span className="bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 bg-clip-text text-transparent">
-              Emotional Growth
+                        
+                        Emotional Growth
             </span>
           </h2>
           <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-slate-600">
@@ -151,20 +175,23 @@ export default function LandingTop() {
         </div>
 
         <div className="mt-10 grid gap-6 md:grid-cols-3">
-          {modules.map((m) => (
-            <div
-              key={m.title}
-              className="rounded-2xl border border-slate-200 bg-white p-7 shadow-sm transition hover:-translate-y-[2px] hover:shadow-md"
-            >
-              <div className="grid h-14 w-14 place-items-center rounded-2xl bg-teal-50 text-xl">
-                {m.icon}
+          {modules.map((m) => {
+            const Icon = m.icon;
+            return (
+              <div
+                key={m.title}
+                className="group rounded-2xl border border-slate-200 bg-white p-7 shadow-sm transition hover:-translate-y-[2px] hover:shadow-md"
+              >
+                <div className="grid h-14 w-14 place-items-center rounded-2xl bg-teal-50 transition-transform duration-200 group-hover:scale-110">
+                  <Icon className="h-6 w-6 text-teal-600 transition-transform duration-200 group-hover:-rotate-6" />
+                </div>
+                <h3 className="mt-6 text-lg font-extrabold">{m.title}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                  {m.desc}
+                </p>
               </div>
-              <h3 className="mt-6 text-lg font-extrabold">{m.title}</h3>
-              <p className="mt-3 text-sm leading-relaxed text-slate-600">
-                {m.desc}
-              </p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 
@@ -181,7 +208,6 @@ export default function LandingTop() {
               building healthier work environments.
             </p>
 
-            {/* ✅ pills row restored */}
             <div className="mx-auto mt-6 flex max-w-3xl flex-wrap items-center justify-center gap-3 text-xs text-white/90">
               <Pill>Affordable for SME organizations</Pill>
               <Pill>No credit card required</Pill>
@@ -213,8 +239,8 @@ export default function LandingTop() {
         <div className="mx-auto grid max-w-6xl gap-10 px-6 py-12 md:grid-cols-4">
           <div>
             <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white shadow-sm">
-                <span>🧠</span>
+              <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white shadow-sm shadow-[0_0_16px_rgba(34,211,238,0.28)]">
+                <Brain className="h-5 w-5" />
               </div>
               <span className="text-lg font-extrabold">BrainUp</span>
             </div>
@@ -225,9 +251,18 @@ export default function LandingTop() {
             </p>
 
             <div className="mt-5 space-y-2 text-sm text-slate-600">
-              <div>📧 support@brainup.my</div>
-              <div>📞 +60 14 372 4652</div>
-              <div>📍 Universiti Sains Malaysia (USM), Penang</div>
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-teal-600" />
+                support@brainup.my
+              </div>
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-teal-600" />
+                +60 14 372 4652
+              </div>
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-teal-600" />
+                Universiti Sains Malaysia (USM), Penang
+              </div>
             </div>
           </div>
 
