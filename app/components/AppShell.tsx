@@ -19,6 +19,8 @@ import {
   LogOut,
   Menu,
   Search,
+  BarChart3,
+  Gift,
 } from "lucide-react";
 
 type AppRole = "EMPLOYEE" | "HR" | "ADMIN" | string;
@@ -41,6 +43,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [hubOpen, setHubOpen] = useState(true);
+  const [gamificationOpen, setGamificationOpen] = useState(false);
 
   // top search (UI only)
   const [q, setQ] = useState("");
@@ -264,13 +267,45 @@ function AppShell({ children }: { children: React.ReactNode }) {
               active={isActive("/journal")}
             />
 
-            <SidebarLink
-              open={sidebarOpen}
-              href="/gamification"
-              icon={<Trophy size={18} />}
-              label="Gamification"
-              active={isActive("/gamification")}
-            />
+            {/* GAMIFICATION — replaces old single SidebarLink */}
+            <button
+              type="button"
+              onClick={() => setGamificationOpen((v) => !v)}
+              className={[
+                "mt-2 flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left",
+                "bg-white/0 hover:bg-white/10 transition",
+              ].join(" ")}
+            >
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/10">
+                <Trophy size={18} />
+              </span>
+              {sidebarOpen && (
+                <>
+                  <span className="flex-1 text-sm font-semibold">Gamification</span>
+                  <ChevronDown
+                    size={16}
+                    className={gamificationOpen ? "rotate-0 transition" : "-rotate-90 transition"}
+                  />
+                </>
+              )}
+            </button>
+
+            {gamificationOpen && (
+              <div className={sidebarOpen ? "ml-3 mt-1 space-y-1" : "hidden"}>
+                <SubLink
+                  href="/gamification/stats"
+                  icon={<BarChart3 size={16} />}
+                  label="Stats"
+                  active={isActive("/gamification/stats")}
+                />
+                <SubLink
+                  href="/gamification/rewards"
+                  icon={<Gift size={16} />}
+                  label="Rewards"
+                  active={isActive("/gamification/rewards")}
+                />
+              </div>
+            )}
           </nav>
 
           <div className="px-2 pb-4">

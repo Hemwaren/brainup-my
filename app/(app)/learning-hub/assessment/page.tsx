@@ -21,15 +21,15 @@ type Likert = 1 | 2 | 3 | 4 | 5;
 type Question = {
   id: string;
   pillar: Pillar;
-  skill: string; // within pillar
+  skill: string;
   text: string;
-  reverse?: boolean; // reverse scoring for balance
+  reverse?: boolean;
 };
 
 type ResultSkill = {
   pillar: Pillar;
   skill: string;
-  scorePct: number; // 0-100
+  scorePct: number;
 };
 
 function clamp(n: number, min: number, max: number) {
@@ -37,7 +37,6 @@ function clamp(n: number, min: number, max: number) {
 }
 
 function scoreToPct(avgLikert: number) {
-  // Likert 1..5 -> 0..100 (simple mapping)
   const pct = ((avgLikert - 1) / 4) * 100;
   return clamp(Math.round(pct), 0, 100);
 }
@@ -70,21 +69,17 @@ function bandLabel(pct: number) {
 }
 
 function reverseLikert(v: Likert): Likert {
-  // 1<->5, 2<->4, 3->3
   return (6 - v) as Likert;
 }
 
 const QUESTIONS: Question[] = [
-  // KNOW YOURSELF (7)
-  { id: "q1", pillar: "KNOW_YOURSELF", skill: "Emotional Awareness", text: "I can clearly name what I’m feeling in the moment." },
+  { id: "q1", pillar: "KNOW_YOURSELF", skill: "Emotional Awareness", text: "I can clearly name what I'm feeling in the moment." },
   { id: "q2", pillar: "KNOW_YOURSELF", skill: "Emotional Awareness", text: "I notice emotional changes in my body (e.g., tension, breathing) before I react." },
   { id: "q3", pillar: "KNOW_YOURSELF", skill: "Triggers & Patterns", text: "I know what situations or people tend to trigger my stress." },
   { id: "q4", pillar: "KNOW_YOURSELF", skill: "Triggers & Patterns", text: "I can spot repeating emotional patterns in my behavior over time." },
   { id: "q5", pillar: "KNOW_YOURSELF", skill: "Self-Understanding", text: "I understand why I feel the way I feel, not just what I feel." },
-  { id: "q6", pillar: "KNOW_YOURSELF", skill: "Self-Understanding", text: "When I’m upset, I can usually identify the real cause." },
+  { id: "q6", pillar: "KNOW_YOURSELF", skill: "Self-Understanding", text: "When I'm upset, I can usually identify the real cause." },
   { id: "q7", pillar: "KNOW_YOURSELF", skill: "Confidence & Clarity", text: "I often feel confused about my emotions.", reverse: true },
-
-  // CHOOSE YOURSELF (7)
   { id: "q8", pillar: "CHOOSE_YOURSELF", skill: "Emotional Control", text: "When things go wrong, I can pause before reacting." },
   { id: "q9", pillar: "CHOOSE_YOURSELF", skill: "Emotional Control", text: "I can stay calm during disagreements." },
   { id: "q10", pillar: "CHOOSE_YOURSELF", skill: "Stress Handling", text: "Stress quickly overwhelms me.", reverse: true },
@@ -92,12 +87,10 @@ const QUESTIONS: Question[] = [
   { id: "q12", pillar: "CHOOSE_YOURSELF", skill: "Motivation", text: "I stay motivated even when progress feels slow." },
   { id: "q13", pillar: "CHOOSE_YOURSELF", skill: "Decision-Making", text: "I make better decisions when I consider both facts and feelings." },
   { id: "q14", pillar: "CHOOSE_YOURSELF", skill: "Optimism", text: "I tend to assume things will go badly.", reverse: true },
-
-  // GIVE YOURSELF (6)
-  { id: "q15", pillar: "GIVE_YOURSELF", skill: "Empathy", text: "I can usually sense how others feel, even if they don’t say it." },
-  { id: "q16", pillar: "GIVE_YOURSELF", skill: "Empathy", text: "I consider others’ feelings before I speak or act." },
+  { id: "q15", pillar: "GIVE_YOURSELF", skill: "Empathy", text: "I can usually sense how others feel, even if they don't say it." },
+  { id: "q16", pillar: "GIVE_YOURSELF", skill: "Empathy", text: "I consider others' feelings before I speak or act." },
   { id: "q17", pillar: "GIVE_YOURSELF", skill: "Trust & Relationships", text: "People often feel comfortable opening up to me." },
-  { id: "q18", pillar: "GIVE_YOURSELF", skill: "Trust & Relationships", text: "I struggle to see things from another person’s perspective.", reverse: true },
+  { id: "q18", pillar: "GIVE_YOURSELF", skill: "Trust & Relationships", text: "I struggle to see things from another person's perspective.", reverse: true },
   { id: "q19", pillar: "GIVE_YOURSELF", skill: "Purpose & Impact", text: "I care about contributing positively to the people around me." },
   { id: "q20", pillar: "GIVE_YOURSELF", skill: "Purpose & Impact", text: "My actions usually align with my values." },
 ];
@@ -182,7 +175,6 @@ export default function AssessmentPage() {
   }
 
   const computed = useMemo(() => {
-    // collect scored answers
     const scored = QUESTIONS.map((q) => {
       const raw = answers[q.id];
       if (!raw) return null;
@@ -190,14 +182,12 @@ export default function AssessmentPage() {
       return { ...q, value: v };
     }).filter(Boolean) as Array<Question & { value: Likert }>;
 
-    // overall avg
     const overallAvg =
       scored.length === 0
         ? 0
         : scored.reduce((sum, s) => sum + s.value, 0) / scored.length;
     const overallPct = scoreToPct(overallAvg);
 
-    // pillar avgs
     const pillars: Record<Pillar, number> = {
       KNOW_YOURSELF: 0,
       CHOOSE_YOURSELF: 0,
@@ -226,7 +216,6 @@ export default function AssessmentPage() {
         : 0,
     };
 
-    // skill avgs
     const skillMap = new Map<string, { pillar: Pillar; sum: number; count: number }>();
     for (const s of scored) {
       const key = `${s.pillar}__${s.skill}`;
@@ -250,12 +239,12 @@ export default function AssessmentPage() {
     return { overallPct, pillarPct, skills, top2, bottom2, level: lvl };
   }, [answers]);
 
+  // ✅ CHANGED: added XP award after successful save
   async function saveResults() {
     if (!userId) return;
     setSaving(true);
     setSaveMsg(null);
 
-    // best-effort insert (won't crash if table doesn't exist)
     try {
       await supabase.from("ei_assessment_results").insert({
         user_id: userId,
@@ -267,8 +256,21 @@ export default function AssessmentPage() {
         created_at: new Date().toISOString(),
       });
       setSaveMsg("Saved! Your results are stored.");
+
+      // Award XP for completing full EI assessment
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        fetch("/api/gamification/award-xp", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ activityKey: "full_ei_assessment" }),
+        }).catch(() => {});
+      }
     } catch {
-      setSaveMsg("Couldn’t save (table not set yet). Results still shown on screen.");
+      setSaveMsg("Couldn't save (table not set yet). Results still shown on screen.");
     } finally {
       setSaving(false);
     }
@@ -298,7 +300,6 @@ export default function AssessmentPage() {
   return (
     <div className="min-h-screen bg-[#f7fbff]">
       <div className="mx-auto max-w-4xl px-4 py-6">
-        {/* Header */}
         <div className="mb-5 flex items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
@@ -335,7 +336,7 @@ export default function AssessmentPage() {
                 <ul className="mt-2 space-y-2 text-sm text-slate-600">
                   <li>• No right or wrong answers — respond honestly.</li>
                   <li>• Takes about 3–5 minutes.</li>
-                  <li>• You’ll get an overall EI score + breakdown by pillars and skills.</li>
+                  <li>• You'll get an overall EI score + breakdown by pillars and skills.</li>
                 </ul>
 
                 <div className="mt-5 flex flex-wrap gap-2">
@@ -361,7 +362,6 @@ export default function AssessmentPage() {
 
         {step === "TEST" && current && (
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            {/* Progress */}
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-extrabold text-slate-900">
                 Question {idx + 1} / {total}
@@ -375,18 +375,15 @@ export default function AssessmentPage() {
               />
             </div>
 
-            {/* Pillar tag */}
             <div className="mt-4 inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-extrabold text-slate-700">
               {labelPillar(current.pillar)} • {current.skill}
             </div>
 
-            {/* Question */}
             <div className="mt-3 text-lg font-extrabold text-slate-900">{current.text}</div>
             <div className="mt-1 text-sm text-slate-600">
               Select the option that best describes you.
             </div>
 
-            {/* Options */}
             <div className="mt-4 space-y-2">
               {OPTIONS.map((o) => {
                 const selected = answers[current.id] === o.value;
@@ -416,7 +413,6 @@ export default function AssessmentPage() {
               })}
             </div>
 
-            {/* Nav */}
             <div className="mt-5 flex items-center justify-between gap-2">
               <button
                 type="button"
@@ -450,7 +446,6 @@ export default function AssessmentPage() {
 
         {step === "RESULTS" && (
           <section className="space-y-4">
-            {/* Overall summary */}
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -484,7 +479,6 @@ export default function AssessmentPage() {
               </div>
             </div>
 
-            {/* Pillars chart */}
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="text-base font-extrabold text-slate-900">Pillars Breakdown</div>
               <div className="mt-1 text-sm text-slate-600">
@@ -498,7 +492,6 @@ export default function AssessmentPage() {
               </div>
             </div>
 
-            {/* Skills */}
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="text-base font-extrabold text-slate-900">Skill Breakdown</div>
               <div className="mt-1 text-sm text-slate-600">
@@ -517,13 +510,10 @@ export default function AssessmentPage() {
               </div>
             </div>
 
-            {/* Strengths + Growth */}
             <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="text-base font-extrabold text-slate-900">Your Strengths</div>
-                <div className="mt-1 text-sm text-slate-600">
-                  Skills you can leverage immediately.
-                </div>
+                <div className="mt-1 text-sm text-slate-600">Skills you can leverage immediately.</div>
                 <div className="mt-4 space-y-3">
                   {computed.top2.map((s) => (
                     <MiniSkill key={`top-${s.pillar}-${s.skill}`} title={s.skill} pct={s.scorePct} />
@@ -533,9 +523,7 @@ export default function AssessmentPage() {
 
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="text-base font-extrabold text-slate-900">Growth Areas</div>
-                <div className="mt-1 text-sm text-slate-600">
-                  Focus here for the biggest improvement.
-                </div>
+                <div className="mt-1 text-sm text-slate-600">Focus here for the biggest improvement.</div>
                 <div className="mt-4 space-y-3">
                   {computed.bottom2.map((s) => (
                     <MiniSkill key={`bot-${s.pillar}-${s.skill}`} title={s.skill} pct={s.scorePct} />
@@ -544,7 +532,6 @@ export default function AssessmentPage() {
               </div>
             </div>
 
-            {/* Actions */}
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex flex-wrap items-center gap-2">
                 <button
@@ -617,15 +604,7 @@ function BarRow({ label, desc, pct }: { label: string; desc: string; pct: number
   );
 }
 
-function SkillCard({
-  pillar,
-  skill,
-  pct,
-}: {
-  pillar: string;
-  skill: string;
-  pct: number;
-}) {
+function SkillCard({ pillar, skill, pct }: { pillar: string; skill: string; pct: number }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
       <div className="text-xs font-bold text-slate-500">{pillar}</div>
