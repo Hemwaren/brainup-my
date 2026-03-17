@@ -1,16 +1,32 @@
-@import "tailwindcss";  /* Simple base so everything renders clean */
+@import "tailwindcss";
 
 html, body {
   height: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 body {
-  background: #f8fafc; /* slate-50-ish */
-  color: #0f172a;      /* slate-900-ish */
+  background-color: #e8f4fd;
+  background-image:
+    radial-gradient(ellipse 120% 80% at 110% -10%, #38bdf8 0%, transparent 55%),
+    radial-gradient(ellipse 80% 60% at 100% 100%, #0ea5e9 0%, transparent 50%),
+    radial-gradient(ellipse 100% 70% at -10% 110%, #7dd3fc 0%, transparent 55%),
+    radial-gradient(ellipse 60% 40% at 50% 50%, #ffffff 0%, transparent 60%);
+  background-attachment: fixed;
+  color: #0f172a;
 }
 
-/* Optional: smoother fonts like your mockup */
 * {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }

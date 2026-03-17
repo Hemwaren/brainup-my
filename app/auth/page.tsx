@@ -26,17 +26,14 @@ export default function AuthPage() {
   const [signPw, setSignPw] = useState("");
   const [inviteCode, setInviteCode] = useState("");
 
-  // ✅ split messages so they don't carry over
   const [loginMsg, setLoginMsg] = useState<string | null>(null);
   const [signupMsg, setSignupMsg] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
 
-  // password visibility toggles
   const [showLoginPw, setShowLoginPw] = useState(false);
   const [showSignPw, setShowSignPw] = useState(false);
 
-  // ✅ HR invite validation state
   const [inviteStatus, setInviteStatus] = useState<InviteStatus>("IDLE");
   const [inviteHint, setInviteHint] = useState<string | null>(null);
   const debounceRef = useRef<number | null>(null);
@@ -44,9 +41,6 @@ export default function AuthPage() {
   const isHrLocked =
     role === "HR" && (inviteStatus !== "VALID" || !inviteCode.trim());
 
-  // ============================
-  // Password strength (SIGNUP)
-  // ============================
   const pwRules = useMemo(() => {
     const pw = signPw || "";
     return {
@@ -70,13 +64,10 @@ export default function AuthPage() {
   }
 
   function canSignup() {
-    // require all rules true
     return pwScore === 5;
   }
 
-  // ✅ HR invite: instant validation (debounced) while typing
   useEffect(() => {
-    // only relevant for signup+HR
     if (mode !== "signup" || role !== "HR") {
       setInviteStatus("IDLE");
       setInviteHint(null);
@@ -90,7 +81,6 @@ export default function AuthPage() {
       return;
     }
 
-    // debounce
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
 
     debounceRef.current = window.setTimeout(async () => {
@@ -125,12 +115,12 @@ export default function AuthPage() {
     };
   }, [inviteCode, role, mode]);
 
+  // ✅ ONLY CHANGE — updated redirect logic based on role
   async function onLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoginMsg(null);
     setLoading(true);
 
-    // ✅ custom validation message BEFORE Supabase
     if (!loginEmail.trim() || !loginPw.trim()) {
       setLoginMsg("Please enter your email and password.");
       setLoading(false);
@@ -149,9 +139,6 @@ export default function AuthPage() {
       return;
     }
 
-    // "Remember me" best-effort:
-    // Supabase persists session by default. If user unchecks rememberMe,
-    // we clear the stored session after successful login so it won't survive browser restart.
     if (!rememberMe) {
       try {
         for (let i = localStorage.length - 1; i >= 0; i--) {
@@ -165,14 +152,20 @@ export default function AuthPage() {
       }
     }
 
-    router.push("/post-login");
+    // ✅ Route based on role
+    const { data: { user } } = await supabase.auth.getUser();
+    const role = user?.user_metadata?.role ?? "EMPLOYEE";
+    if (String(role).toUpperCase() === "ADMIN") {
+      router.push("/admin/dashboard");
+    } else {
+      router.push("/post-login");
+    }
   }
 
   async function onSignup(e: React.FormEvent) {
     e.preventDefault();
     setSignupMsg(null);
 
-    // ✅ HR must validate invite first
     if (role === "HR") {
       if (!inviteCode.trim()) {
         setSignupMsg("Please enter HR Invite Code.");
@@ -188,7 +181,6 @@ export default function AuthPage() {
       }
     }
 
-    // ✅ enforce strong password
     if (!canSignup()) {
       setSignupMsg("Kindly complete all fields before continuing");
       return;
@@ -225,7 +217,7 @@ export default function AuthPage() {
 
     const email = loginEmail.trim().toLowerCase();
     if (!email) {
-      setLoginMsg("Please enter your email first, then click “Forgot password?”.");
+      setLoginMsg("Please enter your email first, then click \"Forgot password?\".");
       return;
     }
 
@@ -244,7 +236,6 @@ export default function AuthPage() {
   return (
     <div className="min-h-screen bg-white">
       <div className="grid min-h-screen grid-cols-1 lg:grid-cols-2">
-        {/* FORM PANEL (switch left/right using order, keep centered) */}
         <div
           className={[
             "relative flex min-h-screen items-center justify-center px-6 py-12",
@@ -271,7 +262,6 @@ export default function AuthPage() {
               className="w-full max-w-md"
             >
               <div className="w-full max-w-md">
-                {/* ✅ logo clickable back to landing */}
                 <button
                   type="button"
                   onClick={() => router.push("/")}
@@ -293,7 +283,6 @@ export default function AuthPage() {
                     : "Get started with BrainUp"}
                 </p>
 
-                {/* tabs */}
                 <div className="mt-6 flex gap-2">
                   <button
                     onClick={() => {
@@ -325,7 +314,6 @@ export default function AuthPage() {
                   </button>
                 </div>
 
-                {/* message (separate per tab) */}
                 {mode === "login" && loginMsg && (
                   <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
                     {loginMsg}
@@ -337,13 +325,10 @@ export default function AuthPage() {
                   </div>
                 )}
 
-                {/* forms */}
                 {mode === "login" ? (
                   <form onSubmit={onLogin} className="mt-6 space-y-4">
                     <div>
-                      <label className="text-sm font-bold text-slate-700">
-                        Email
-                      </label>
+                      <label className="text-sm font-bold text-slate-700">Email</label>
                       <input
                         value={loginEmail}
                         onChange={(e) => setLoginEmail(e.target.value)}
@@ -353,9 +338,7 @@ export default function AuthPage() {
                     </div>
 
                     <div>
-                      <label className="text-sm font-bold text-slate-700">
-                        Password
-                      </label>
+                      <label className="text-sm font-bold text-slate-700">Password</label>
                       <div className="mt-2 relative">
                         <input
                           type={showLoginPw ? "text" : "password"}
@@ -368,9 +351,7 @@ export default function AuthPage() {
                           type="button"
                           onClick={() => setShowLoginPw((v) => !v)}
                           className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
-                          aria-label={
-                            showLoginPw ? "Hide password" : "Show password"
-                          }
+                          aria-label={showLoginPw ? "Hide password" : "Show password"}
                         >
                           {showLoginPw ? <EyeOff size={18} /> : <Eye size={18} />}
                         </button>
@@ -387,7 +368,6 @@ export default function AuthPage() {
                         />
                         Remember me
                       </label>
-
                       <button
                         type="button"
                         onClick={onForgotPassword}
@@ -407,9 +387,7 @@ export default function AuthPage() {
                 ) : (
                   <form onSubmit={onSignup} className="mt-6 space-y-4">
                     <div>
-                      <label className="text-sm font-bold text-slate-700">
-                        Select your role
-                      </label>
+                      <label className="text-sm font-bold text-slate-700">Select your role</label>
                       <div className="mt-2 flex gap-2">
                         <button
                           type="button"
@@ -447,26 +425,18 @@ export default function AuthPage() {
 
                     {role === "HR" && (
                       <div>
-                        <label className="text-sm font-bold text-slate-700">
-                          HR Invite Code
-                        </label>
+                        <label className="text-sm font-bold text-slate-700">HR Invite Code</label>
                         <input
                           value={inviteCode}
                           onChange={(e) => setInviteCode(e.target.value)}
                           className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:ring-2 focus:ring-cyan-300"
                           placeholder="Enter invite code"
                         />
-
                         {inviteHint && (
-                          <div
-                            className={`mt-2 text-sm font-semibold ${
-                              inviteStatus === "VALID"
-                                ? "text-green-700"
-                                : inviteStatus === "INVALID"
-                                ? "text-red-600"
-                                : "text-slate-600"
-                            }`}
-                          >
+                          <div className={`mt-2 text-sm font-semibold ${
+                            inviteStatus === "VALID" ? "text-green-700" :
+                            inviteStatus === "INVALID" ? "text-red-600" : "text-slate-600"
+                          }`}>
                             {inviteHint}
                           </div>
                         )}
@@ -474,9 +444,7 @@ export default function AuthPage() {
                     )}
 
                     <div>
-                      <label className="text-sm font-bold text-slate-700">
-                        Full Name
-                      </label>
+                      <label className="text-sm font-bold text-slate-700">Full Name</label>
                       <input
                         disabled={isHrLocked}
                         value={fullName}
@@ -487,9 +455,7 @@ export default function AuthPage() {
                     </div>
 
                     <div>
-                      <label className="text-sm font-bold text-slate-700">
-                        Work Email
-                      </label>
+                      <label className="text-sm font-bold text-slate-700">Work Email</label>
                       <input
                         disabled={isHrLocked}
                         value={signEmail}
@@ -501,9 +467,7 @@ export default function AuthPage() {
 
                     {role === "EMPLOYEE" && (
                       <div>
-                        <label className="text-sm font-bold text-slate-700">
-                          Department
-                        </label>
+                        <label className="text-sm font-bold text-slate-700">Department</label>
                         <input
                           value={dept}
                           onChange={(e) => setDept(e.target.value)}
@@ -514,9 +478,7 @@ export default function AuthPage() {
                     )}
 
                     <div>
-                      <label className="text-sm font-bold text-slate-700">
-                        Password
-                      </label>
+                      <label className="text-sm font-bold text-slate-700">Password</label>
                       <div className="mt-2 relative">
                         <input
                           disabled={isHrLocked}
@@ -530,9 +492,7 @@ export default function AuthPage() {
                           type="button"
                           onClick={() => setShowSignPw((v) => !v)}
                           className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
-                          aria-label={
-                            showSignPw ? "Hide password" : "Show password"
-                          }
+                          aria-label={showSignPw ? "Hide password" : "Show password"}
                         >
                           {showSignPw ? <EyeOff size={18} /> : <Eye size={18} />}
                         </button>
@@ -545,7 +505,6 @@ export default function AuthPage() {
                             style={{ width: `${(pwScore / 5) * 100}%` }}
                           />
                         </div>
-
                         <div className="mt-2 grid gap-1 text-xs">
                           <Rule ok={pwRules.minLen} text="Min 8 characters" />
                           <Rule ok={pwRules.upper} text="Uppercase letter (A-Z)" />
@@ -569,16 +528,12 @@ export default function AuthPage() {
           </AnimatePresence>
         </div>
 
-        {/* HERO PANEL (switch order too, stays centered) */}
-        <div
-          className={[
-            "hidden lg:flex items-center justify-center bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400",
-            mode === "login" ? "lg:order-2" : "lg:order-1",
-          ].join(" ")}
-        >
+        <div className={[
+          "hidden lg:flex items-center justify-center bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400",
+          mode === "login" ? "lg:order-2" : "lg:order-1",
+        ].join(" ")}>
           <div className="text-center text-white px-10">
             <div className="mx-auto grid h-20 w-20 place-items-center rounded-3xl bg-white/20 backdrop-blur">
-              {/* ✅ ONLY CHANGED HERO EMOJI */}
               <Brain className="h-9 w-9 text-white" />
             </div>
             <h2 className="mt-8 text-4xl font-extrabold">
@@ -597,16 +552,8 @@ export default function AuthPage() {
 
 function Rule({ ok, text }: { ok: boolean; text: string }) {
   return (
-    <div
-      className={`flex items-center gap-2 ${
-        ok ? "text-green-700" : "text-slate-500"
-      }`}
-    >
-      <span
-        className={`h-1.5 w-1.5 rounded-full ${
-          ok ? "bg-green-600" : "bg-slate-300"
-        }`}
-      />
+    <div className={`flex items-center gap-2 ${ok ? "text-green-700" : "text-slate-500"}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${ok ? "bg-green-600" : "bg-slate-300"}`} />
       <span>{text}</span>
     </div>
   );

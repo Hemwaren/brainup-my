@@ -1,4 +1,3 @@
-// app/(app)/post-login/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -16,6 +15,10 @@ import {
   Circle,
   CheckCircle2,
   BarChart3,
+  Phone,
+  Heart,
+  Wrench,
+  ArrowRight,
 } from "lucide-react";
 
 type AppRole = "EMPLOYEE" | "HR" | "ADMIN" | string;
@@ -37,6 +40,25 @@ type FocusTask = {
   text: string;
 };
 
+type Announcement = {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+  publish_date: string;
+  status: string;
+};
+
+type SupportListing = {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  contact: string | null;
+  url: string | null;
+  is_urgent: boolean;
+};
+
 function fmtJoined(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "Joined recently";
@@ -45,6 +67,18 @@ function fmtJoined(iso: string) {
     day: "2-digit",
     year: "numeric",
   })}`;
+}
+
+function fmtDate(d: string) {
+  const date = new Date(d);
+  const today = new Date();
+  const diff = Math.floor(
+    (today.getTime() - date.getTime()) / (1000 * 60 * 60 * 24)
+  );
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Yesterday";
+  if (diff < 7) return `${diff} days ago`;
+  return date.toLocaleDateString(undefined, { month: "short", day: "2-digit" });
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -56,12 +90,27 @@ function progressPct(value: number, max: number) {
   return clamp(Math.round((value / max) * 100), 0, 100);
 }
 
+const CATEGORY_BORDER: Record<string, string> = {
+  WELLNESS: "border-l-emerald-400",
+  EVENT: "border-l-sky-400",
+  REMINDER: "border-l-amber-400",
+  GENERAL: "border-l-slate-300",
+};
+
+const CATEGORY_BADGE: Record<string, string> = {
+  WELLNESS: "bg-emerald-50 text-emerald-700",
+  EVENT: "bg-sky-50 text-sky-700",
+  REMINDER: "bg-amber-50 text-amber-700",
+  GENERAL: "bg-slate-50 text-slate-600",
+};
+
 export default function PostLoginPage() {
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
-
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [supportListings, setSupportListings] = useState<SupportListing[]>([]);
   const [taskText, setTaskText] = useState("");
   const [tasks, setTasks] = useState<FocusTask[]>([
     { id: "t1", text: "Complete EI Assessment module" },
@@ -86,7 +135,6 @@ export default function PostLoginPage() {
       const u = data.user;
       const md: any = u.user_metadata || {};
 
-      // Fetch profiles table
       let dbProfile: any = null;
       try {
         const { data: p } = await supabase
@@ -99,7 +147,6 @@ export default function PostLoginPage() {
         dbProfile = null;
       }
 
-      // ✅ Fetch gamification data separately
       let gamRow: any = null;
       try {
         const { data: g } = await supabase
@@ -112,19 +159,58 @@ export default function PostLoginPage() {
         gamRow = null;
       }
 
-      const role: AppRole = (dbProfile?.role ?? md?.role ?? "EMPLOYEE") as AppRole;
-      const deptRaw = (dbProfile?.department ?? md?.department ?? md?.dept ?? "") as string;
-      const department = String(role).toUpperCase() === "HR" ? "Human Resources" : deptRaw || "—";
-      const joined_at = (dbProfile?.joined_at ?? md?.joined_at ?? u.created_at ?? new Date().toISOString()) as string;
-      const full_name = (dbProfile?.full_name ?? md?.full_name ?? md?.name ?? "User") as string;
-      const avatar_url = (dbProfile?.avatar_url ?? md?.avatar_url ?? null) as string | null;
+      try {
+        const { data: ann } = await supabase
+          .from("hr_announcements")
+          .select("id, title, content, category, publish_date, status")
+          .eq("status", "PUBLISHED")
+          .order("publish_date", { ascending: false })
+          .limit(4);
+        if (alive) setAnnouncements(ann ?? []);
+      } catch {
+        if (alive) setAnnouncements([]);
+      }
 
-      // ✅ Use gamification table values, fall back to 0
+      try {
+        const { data: support } = await supabase
+          .from("support_directory")
+          .select("id, title, description, category, contact, url, is_urgent")
+          .eq("is_active", true)
+          .order("is_urgent", { ascending: false })
+          .limit(6);
+        if (alive) setSupportListings(support ?? []);
+      } catch {
+        if (alive) setSupportListings([]);
+      }
+
+      const role: AppRole = (dbProfile?.role ??
+        md?.role ??
+        "EMPLOYEE") as AppRole;
+      const deptRaw = (dbProfile?.department ??
+        md?.department ??
+        md?.dept ??
+        "") as string;
+      const department =
+        String(role).toUpperCase() === "HR"
+          ? "Human Resources"
+          : deptRaw || "—";
+      const joined_at = (dbProfile?.joined_at ??
+        md?.joined_at ??
+        u.created_at ??
+        new Date().toISOString()) as string;
+      const full_name = (dbProfile?.full_name ??
+        md?.full_name ??
+        md?.name ??
+        "User") as string;
+      const avatar_url = (dbProfile?.avatar_url ??
+        md?.avatar_url ??
+        null) as string | null;
+
       const total_xp = Number(gamRow?.total_xp ?? 0);
       const level = Number(gamRow?.level ?? 1);
       const days_streak = Number(gamRow?.current_streak ?? 0);
 
-      const built: Profile = {
+      setProfile({
         full_name,
         email: u.email ?? "",
         role,
@@ -134,14 +220,11 @@ export default function PostLoginPage() {
         level,
         total_xp,
         days_streak,
-      };
-
-      setProfile(built);
+      });
       setLoading(false);
     }
 
     load();
-
     return () => {
       alive = false;
     };
@@ -154,8 +237,10 @@ export default function PostLoginPage() {
     return "Employee";
   }, [profile?.role]);
 
-  // ✅ Use real level table thresholds
-  const levelInfo = useMemo(() => getLevelFromXP(profile?.total_xp ?? 0), [profile?.total_xp]);
+  const levelInfo = useMemo(
+    () => getLevelFromXP(profile?.total_xp ?? 0),
+    [profile?.total_xp]
+  );
   const levelProgress = progressPct(levelInfo.xpIntoLevel, levelInfo.xpNeeded);
 
   function addTask() {
@@ -177,55 +262,99 @@ export default function PostLoginPage() {
     );
   }
 
+  const supportIconMap: Record<string, React.ReactNode> = {
+    CRISIS: <Phone size={18} />,
+    COUNSELLING: <Heart size={18} />,
+    SELF_HELP: <Wrench size={18} />,
+    ONLINE: <Phone size={18} />,
+    IN_PERSON: <Heart size={18} />,
+  };
+
+  const supportColorMap: Record<string, "teal" | "rose" | "amber"> = {
+    CRISIS: "rose",
+    COUNSELLING: "teal",
+    SELF_HELP: "amber",
+    ONLINE: "teal",
+    IN_PERSON: "rose",
+  };
+
   return (
     <div>
       <div className="mb-5">
         <h1 className="text-xl font-extrabold text-slate-900">Home</h1>
         <p className="mt-1 text-sm text-slate-600">
-          Welcome back. Here's your overview in BrainUp.
+          Welcome back. Here is your overview in BrainUp.
         </p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
+        {/* Profile card */}
         <section className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-4">
-              <div className="relative">
-                <div className="grid h-24 w-24 place-items-center rounded-full border border-slate-200 bg-slate-50">
-                  <UserCircle2 className="text-slate-400" size={44} />
-                </div>
-                <button
-                  type="button"
-                  className="absolute bottom-1 right-1 grid h-9 w-9 place-items-center rounded-full border border-slate-200 bg-white shadow-sm hover:bg-slate-50"
-                  aria-label="Edit profile"
-                  onClick={() => router.push("/profile")}
-                >
-                  <UserCircle2 size={16} className="text-slate-700" />
-                </button>
+          <div className="flex items-start gap-4">
+            <div className="relative">
+              <div className="grid h-24 w-24 place-items-center rounded-full border border-slate-200 bg-slate-50">
+                <UserCircle2 className="text-slate-400" size={44} />
               </div>
-
-              <div>
-                <div className="text-lg font-extrabold text-slate-900">{profile.full_name}</div>
-                <div className="mt-1 text-sm text-slate-600">{roleLabel} • {profile.department}</div>
-                <div className="mt-2 inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
-                  {fmtJoined(profile.joined_at)}
-                </div>
+              <button
+                type="button"
+                className="absolute bottom-1 right-1 grid h-9 w-9 place-items-center rounded-full border border-slate-200 bg-white shadow-sm hover:bg-slate-50"
+                aria-label="Edit profile"
+                onClick={() => router.push("/profile")}
+              >
+                <UserCircle2 size={16} className="text-slate-700" />
+              </button>
+            </div>
+            <div>
+              <div className="text-lg font-extrabold text-slate-900">
+                {profile.full_name}
+              </div>
+              <div className="mt-1 text-sm text-slate-600">
+                {roleLabel} • {profile.department}
+              </div>
+              <div className="mt-2 inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+                {fmtJoined(profile.joined_at)}
               </div>
             </div>
           </div>
 
           <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <InfoBox label="Email" value={profile.email || "—"} icon={<Mail size={16} className="text-slate-500" />} />
-            <InfoBox label="Role" value={roleLabel} icon={<BadgeCheck size={16} className="text-slate-500" />} />
-            <InfoBox label="Department" value={profile.department || "—"} icon={<Building2 size={16} className="text-slate-500" />} />
-            <InfoBox label="Days Streak" value={`${profile.days_streak}`} icon={<Flame size={16} className="text-slate-500" />} />
-            <InfoBox label="Level" value={`${profile.level} — ${levelInfo.title}`} icon={<Sparkles size={16} className="text-slate-500" />} />
-            <InfoBox label="Total XP" value={`${profile.total_xp}`} icon={<BarChart3 size={16} className="text-slate-500" />} />
+            <InfoBox
+              label="Email"
+              value={profile.email || "—"}
+              icon={<Mail size={16} className="text-slate-500" />}
+            />
+            <InfoBox
+              label="Role"
+              value={roleLabel}
+              icon={<BadgeCheck size={16} className="text-slate-500" />}
+            />
+            <InfoBox
+              label="Department"
+              value={profile.department || "—"}
+              icon={<Building2 size={16} className="text-slate-500" />}
+            />
+            <InfoBox
+              label="Days Streak"
+              value={String(profile.days_streak)}
+              icon={<Flame size={16} className="text-slate-500" />}
+            />
+            <InfoBox
+              label="Level"
+              value={`${profile.level} — ${levelInfo.title}`}
+              icon={<Sparkles size={16} className="text-slate-500" />}
+            />
+            <InfoBox
+              label="Total XP"
+              value={String(profile.total_xp)}
+              icon={<BarChart3 size={16} className="text-slate-500" />}
+            />
           </div>
 
           <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
             <div className="flex items-center justify-between">
-              <div className="text-xs font-bold text-slate-500">Level Progress</div>
+              <div className="text-xs font-bold text-slate-500">
+                Level Progress
+              </div>
               <div className="text-xs font-extrabold text-slate-900">
                 {levelInfo.xpIntoLevel} / {levelInfo.xpNeeded} XP
               </div>
@@ -238,7 +367,8 @@ export default function PostLoginPage() {
             </div>
             {levelInfo.nextLevel && (
               <div className="mt-2 text-xs text-slate-500">
-                {levelInfo.xpNeeded - levelInfo.xpIntoLevel} XP to Level {levelInfo.nextLevel.level}
+                {levelInfo.xpNeeded - levelInfo.xpIntoLevel} XP to Level{" "}
+                {levelInfo.nextLevel.level}
               </div>
             )}
           </div>
@@ -261,22 +391,25 @@ export default function PostLoginPage() {
           </div>
         </section>
 
+        {/* Today's Focus */}
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div>
-            <div className="text-base font-extrabold text-slate-900">Today's Focus</div>
-            <div className="mt-1 text-sm text-slate-600">Add small tasks and tick them off when done.</div>
+          <div className="text-base font-extrabold text-slate-900">
+            Today&#39;s Focus
+          </div>
+          <div className="mt-1 text-sm text-slate-600">
+            Add small tasks and tick them off when done.
           </div>
 
           <div className="mt-4 flex gap-2">
-            <div className="flex-1">
-              <input
-                value={taskText}
-                onChange={(e) => setTaskText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") addTask(); }}
-                placeholder="Create a task..."
-                className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300"
-              />
-            </div>
+            <input
+              value={taskText}
+              onChange={(e) => setTaskText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") addTask();
+              }}
+              placeholder="Create a task..."
+              className="flex-1 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300"
+            />
             <button
               type="button"
               onClick={addTask}
@@ -301,9 +434,15 @@ export default function PostLoginPage() {
                   className="group flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-left hover:bg-slate-50"
                   aria-label="Complete task"
                 >
-                  <span className="text-slate-400 group-hover:hidden"><Circle size={18} /></span>
-                  <span className="hidden text-emerald-600 group-hover:inline-flex"><CheckCircle2 size={18} /></span>
-                  <span className="text-sm font-semibold text-slate-800">{t.text}</span>
+                  <span className="text-slate-400 group-hover:hidden">
+                    <Circle size={18} />
+                  </span>
+                  <span className="hidden text-emerald-600 group-hover:inline-flex">
+                    <CheckCircle2 size={18} />
+                  </span>
+                  <span className="text-sm font-semibold text-slate-800">
+                    {t.text}
+                  </span>
                 </button>
               ))
             )}
@@ -315,57 +454,128 @@ export default function PostLoginPage() {
         </section>
       </div>
 
+      {/* ANNOUNCEMENT BOARD */}
       <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-base font-extrabold text-slate-900">Announcement Board</div>
-            <div className="mt-1 text-sm text-slate-600">Updates posted by HR will appear here.</div>
+            <div className="text-base font-extrabold text-slate-900">
+              Announcement Board
+            </div>
+            <div className="mt-1 text-sm text-slate-600">
+              Updates posted by HR will appear here.
+            </div>
           </div>
           <button
             type="button"
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-extrabold text-slate-800 hover:bg-slate-50"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-700 hover:bg-slate-50 transition"
             onClick={() => router.push("/announcements")}
           >
             View all
+            <ArrowRight size={12} />
           </button>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <AnnouncementCard title="Welcome to BrainUp" meta="Today" body="Complete your first activity and start building your progress." />
-          <AnnouncementCard title="EI Assessment" meta="This week" body="Try the EI Assessment to discover your current level." />
+        <div className="mt-4">
+          {announcements.length === 0 ? (
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm text-slate-500">
+              No announcements yet. Check back soon.
+            </div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              {announcements.map((a) => (
+                <div
+                  key={a.id}
+                  className={[
+                    "rounded-xl border border-slate-200 border-l-4 bg-white p-4 hover:shadow-sm transition-shadow duration-200",
+                    CATEGORY_BORDER[a.category] ?? "border-l-slate-300",
+                  ].join(" ")}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="text-sm font-extrabold text-slate-900">
+                      {a.title}
+                    </div>
+                    <div className="text-[11px] font-bold text-slate-400 shrink-0">
+                      {fmtDate(a.publish_date)}
+                    </div>
+                  </div>
+                  <div
+                    className={`mt-1.5 inline-flex rounded-full px-2 py-0.5 text-xs font-bold ${
+                      CATEGORY_BADGE[a.category] ?? "bg-slate-50 text-slate-600"
+                    }`}
+                  >
+                    {a.category}
+                  </div>
+                  <div className="mt-2 text-sm text-slate-600 line-clamp-2">
+                    {a.content}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
+      {/* MENTAL HEALTH SUPPORT */}
       <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-base font-extrabold text-slate-900">Mental Health Support Directory</div>
-            <div className="mt-1 text-sm text-slate-600">Verified resources posted by BrainUp admin.</div>
+            <div className="text-base font-extrabold text-slate-900">
+              Mental Health Support
+            </div>
+            <div className="mt-1 text-sm text-slate-600">
+              Verified resources posted by BrainUp admin.
+            </div>
           </div>
           <button
             type="button"
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-extrabold text-slate-800 hover:bg-slate-50"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-700 hover:bg-slate-50 transition"
             onClick={() => router.push("/support-directory")}
           >
             Open directory
+            <ArrowRight size={12} />
           </button>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <MiniCard title="Counselling Hotline" desc="Contact details and hours." />
-          <MiniCard title="Company EAP" desc="Employee assistance program info." />
-          <MiniCard title="Self-help Toolkit" desc="Breathing, grounding, and tips." />
+        <div className="mt-4">
+          {supportListings.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-400">
+              No support resources available yet.
+            </div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-3">
+              {supportListings.map((s) => (
+                <SupportCard
+                  key={s.id}
+                  icon={supportIconMap[s.category] ?? <Heart size={18} />}
+                  color={supportColorMap[s.category] ?? "teal"}
+                  title={s.title}
+                  desc={s.description}
+                  contact={s.contact}
+                  url={s.url}
+                  isUrgent={s.is_urgent}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </section>
     </div>
   );
 }
 
-function InfoBox({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
+function InfoBox({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: string;
+  icon?: React.ReactNode;
+}) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-3">
       <div className="flex items-center gap-2">
-        {icon ? <span className="inline-flex">{icon}</span> : null}
+        {icon && <span className="inline-flex">{icon}</span>}
         <div className="text-xs font-bold text-slate-500">{label}</div>
       </div>
       <div className="mt-1 text-sm font-extrabold text-slate-900">{value}</div>
@@ -373,23 +583,45 @@ function InfoBox({ label, value, icon }: { label: string; value: string; icon?: 
   );
 }
 
-function AnnouncementCard({ title, meta, body }: { title: string; meta: string; body: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 hover:bg-slate-50">
-      <div className="flex items-start justify-between gap-3">
-        <div className="text-sm font-extrabold text-slate-900">{title}</div>
-        <div className="text-[11px] font-bold text-slate-500">{meta}</div>
-      </div>
-      <div className="mt-2 text-sm text-slate-600">{body}</div>
-    </div>
-  );
-}
+function SupportCard({
+  icon,
+  color,
+  title,
+  desc,
+  contact,
+  url,
+  isUrgent,
+}: {
+  icon: React.ReactNode;
+  color: "teal" | "rose" | "amber";
+  title: string;
+  desc: string;
+  contact?: string | null;
+  url?: string | null;
+  isUrgent?: boolean;
+}) {
+  const colorMap = {
+    teal: "bg-teal-50 text-teal-600",
+    rose: "bg-rose-50 text-rose-600",
+    amber: "bg-amber-50 text-amber-600",
+  };
 
-function MiniCard({ title, desc }: { title: string; desc: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 hover:bg-slate-50">
-      <div className="text-sm font-extrabold text-slate-900">{title}</div>
-      <div className="mt-1 text-sm text-slate-600">{desc}</div>
+    <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 hover:shadow-sm hover:border-slate-300 transition-all duration-200">
+      <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${colorMap[color]}`}>
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="text-sm font-extrabold text-slate-900">{title}</div>
+          {isUrgent && (
+            <span className="inline-flex rounded-full bg-rose-50 border border-rose-200 px-1.5 py-0.5 text-[9px] font-extrabold text-rose-700">URGENT</span>
+          )}
+        </div>
+        <div className="mt-0.5 text-xs text-slate-500 line-clamp-2">{desc}</div>
+        {contact && <div className="mt-1 text-xs font-bold text-cyan-600">{contact}</div>}
+        {url && <a href={url} target="_blank" rel="noopener noreferrer" className="mt-1 text-xs font-bold text-cyan-600 hover:underline block truncate">{url}</a>}
+      </div>
     </div>
   );
 }
