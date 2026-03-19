@@ -157,6 +157,22 @@ export default function AuthPage() {
     if(String(r).toUpperCase()==="ADMIN")router.push("/admin/dashboard");else router.push("/post-login");
   }
 
+  async function onForgotPassword() {
+    setLoginMsg(null);
+    const email = loginEmail.trim().toLowerCase();
+    if (!email) {
+      setLoginMsg("Enter your email first, then click Forgot password?");
+      return;
+    }
+    const res = await fetch("/api/auth/reset-password", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json();
+    setLoginMsg(data.message);
+  }
+
   async function onSignup(e:React.FormEvent){
     e.preventDefault();setSignupMsg(null);
     if(role==="HR"){
@@ -170,15 +186,6 @@ export default function AuthPage() {
     const data=await res.json();setLoading(false);
     if(!data.ok){setSignupMsg(data.message||"Signup failed.");return;}
     setSignupMsg(data.message);
-  }
-
-  async function onForgotPassword(){
-    setLoginMsg(null);
-    const email=loginEmail.trim().toLowerCase();
-    if(!email){setLoginMsg("Enter your email first, then click Forgot password?");return;}
-    const{error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:`${window.location.origin}/auth/callback`});
-    if(error){setLoginMsg(error.message);return;}
-    setLoginMsg("Password reset email sent. Check your inbox.");
   }
 
   const formOnLeft=mode==="login";
@@ -287,7 +294,7 @@ export default function AuthPage() {
           </AnimatePresence>
         </div>
 
-        {/* ── TEAL PANEL — 4 scene carousel ── */}
+        {/* ── TEAL PANEL ── */}
         <div
           className={["relative hidden lg:flex flex-col items-center justify-center overflow-hidden",formOnLeft?"lg:order-2":"lg:order-1"].join(" ")}
           style={{background:"linear-gradient(145deg,#0d9488 0%,#0891b2 50%,#0c4a6e 100%)",minHeight:"100vh"}}>
@@ -302,7 +309,6 @@ export default function AuthPage() {
           ))}
 
           <div className="relative z-10 flex flex-col items-center w-full max-w-md px-8 py-10">
-            {/* BrainUp wordmark */}
             <div className="flex items-center gap-2.5 mb-6 self-start">
               <div className="float-anim grid h-9 w-9 place-items-center rounded-xl text-white relative" style={{background:"rgba(255,255,255,0.2)",border:"1px solid rgba(255,255,255,0.35)",backdropFilter:"blur(8px)"}}>
                 <div className="absolute inset-0 rounded-xl" style={{animation:"pulse-ring 2.8s ease-out infinite"}}/>
@@ -311,7 +317,6 @@ export default function AuthPage() {
               <span className="text-base font-extrabold text-white tracking-tight">BrainUp</span>
             </div>
 
-            {/* Illustration card */}
             <div className="relative w-full rounded-3xl overflow-hidden"
               style={{height:"290px",background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.18)",backdropFilter:"blur(12px)",boxShadow:"0 16px 48px rgba(0,0,0,0.22),inset 0 1px 0 rgba(255,255,255,0.15)"}}>
               <div className="absolute top-0 left-0 right-0 h-[3px]"
@@ -337,7 +342,6 @@ export default function AuthPage() {
               </button>
             </div>
 
-            {/* Title + description */}
             <AnimatePresence mode="wait">
               <motion.div key={`txt-${scene}`} initial={{opacity:0,y:14}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-10}} transition={{duration:0.38,ease:"easeOut"}} className="mt-5 text-center w-full">
                 <div className="flex items-center justify-center gap-2 mb-1.5">
@@ -349,7 +353,6 @@ export default function AuthPage() {
               </motion.div>
             </AnimatePresence>
 
-            {/* Pill dot indicators */}
             <div className="mt-5 flex items-center gap-2">
               {SCENES.map((_,i)=>(
                 <button key={i} type="button" onClick={()=>goScene(i)} className="transition-all duration-300 rounded-full"

@@ -1,4 +1,3 @@
-// app/api/auth/signup/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { hashInvite, isAllowedDomain } from "@/lib/inviteHash";
@@ -23,7 +22,6 @@ export async function POST(req: Request) {
     const role = body.role;
     const inviteCode = (body.inviteCode || "").trim();
 
-    // basic validation
     if (!full_name || !email || !password || !role) {
       return NextResponse.json(
         { ok: false, message: "Kindly complete all fields before continuing." },
@@ -31,7 +29,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // domain check (for BOTH employee and HR)
     if (!isAllowedDomain(email)) {
       return NextResponse.json(
         { ok: false, message: "Please use an allowed email domain." },
@@ -39,7 +36,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // HR invite code check
     if (role === "HR") {
       if (!inviteCode) {
         return NextResponse.json(
@@ -65,7 +61,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // Employee must have department, HR should not require it
     if (role === "EMPLOYEE" && !department) {
       return NextResponse.json(
         { ok: false, message: "Department is required for Employee." },
@@ -73,29 +68,35 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ Use ANON signUp so Supabase sends verification email automatically
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
     const supabase = createClient(url, anon);
 
     const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        // store extra fields inside auth.user_metadata
-        data: {
-          full_name,
-          role,
-          department: role === "EMPLOYEE" ? department : null,
-        },
-      },
-    });
+  email,
+  password,
+  options: {
+    data: {
+      full_name,
+      role,
+      department: role === "EMPLOYEE" ? department : null,
+    },
+  },
+});
+
+// TEMP DEBUG
+console.log("=== SIGNUP DEBUG ===");
+console.log("Signup error:", JSON.stringify(error));
+console.log("Signup data:", JSON.stringify(data));
+console.log("====================");
 
     if (error) {
-      return NextResponse.json({ ok: false, message: error.message }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, message: error.message },
+        { status: 400 }
+      );
     }
 
-    // If email confirmations are ON, user must verify via email before login works fully.
     return NextResponse.json(
       {
         ok: true,
@@ -111,4 +112,3 @@ export async function POST(req: Request) {
     );
   }
 }
-
