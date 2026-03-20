@@ -82,15 +82,15 @@ const TOPICS: Topic[] = [
   { id: "parenting",     title: "Parenting",       icon: <Baby        size={15} /> },
 ];
 
-// ─── Gemini via API route ────────────────────────────────────────────────────
-async function callGemini(prompt: string): Promise<string> {
+// ─── Groq via API route ────────────────────────────────────────────────────
+async function callGroq(prompt: string): Promise<string> {
   const res = await fetch("/api/ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt }),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error ?? "Gemini API error.");
+  if (!res.ok) throw new Error(data.error ?? "Groq API error.");
   return data.text ?? "";
 }
 
@@ -122,7 +122,7 @@ Format:
   }
 ]`;
 
-  const raw = await callGemini(prompt);
+  const raw = await callGroq(prompt);
   const cleaned = raw.replace(/```json|```/g, "").trim();
   return JSON.parse(cleaned);
 }
@@ -143,13 +143,13 @@ Rules:
 Format:
 ["Takeaway 1 here.", "Takeaway 2 here.", "Takeaway 3 here."]`;
 
-  const raw = await callGemini(prompt);
+  const raw = await callGroq(prompt);
   const cleaned = raw.replace(/```json|```/g, "").trim();
   return JSON.parse(cleaned);
 }
 
 async function generateWorksheetStory(prompt: string, title: string): Promise<WorksheetStory> {
-  const geminiPrompt = `You are an EI (Emotional Intelligence) game designer. Create an interactive branching scenario game based on this workplace situation.
+  const groqPrompt = `You are an EI (Emotional Intelligence) game designer. Create an interactive branching scenario game based on this workplace situation.
 
 Scenario prompt: "${prompt}"
 Resource title: "${title}"
@@ -200,7 +200,7 @@ Format:
   "eiInsight": "A practical EI tip the employee can apply today."
 }`;
 
-  const raw = await callGemini(geminiPrompt);
+  const raw = await callGroq(groqPrompt);
   const cleaned = raw.replace(/```json|```/g, "").trim();
   return JSON.parse(cleaned);
 }
@@ -224,7 +224,7 @@ function KnowledgeCheckup({
   const [allDone,   setAllDone]   = useState(false);
   const [shuffled,  setShuffled]  = useState<string[]>([]);
 
-  // Small delay before calling Gemini to avoid burst with other calls
+  // Small delay before calling Groq to avoid burst with other calls
   useEffect(() => {
     const timer = setTimeout(async () => {
       try {
@@ -290,7 +290,7 @@ function KnowledgeCheckup({
           {loading && (
             <div className="flex flex-col items-center py-8 gap-3">
               <Loader2 size={32} className="animate-spin text-cyan-500" />
-              <p className="text-sm text-slate-500 font-semibold">Gemini is generating your questions…</p>
+              <p className="text-sm text-slate-500 font-semibold">Groq is generating your questions…</p>
             </div>
           )}
 
@@ -409,7 +409,7 @@ function AISummaryPanel({ resource, onClose }: { resource: EIResource; onClose: 
   const [error,     setError]     = useState<string | null>(null);
   const [fetched,   setFetched]   = useState(false);
 
-  // Only call Gemini when user explicitly opens the panel and hasn't fetched yet
+  // Only call Groq when user explicitly opens the panel and hasn't fetched yet
   useEffect(() => {
     if (fetched) return;
     setFetched(true);
@@ -436,7 +436,7 @@ function AISummaryPanel({ resource, onClose }: { resource: EIResource; onClose: 
           </div>
           <div>
             <div className="text-sm font-extrabold text-slate-900">AI Key Takeaways</div>
-            <div className="text-[11px] text-slate-500">Powered by Gemini</div>
+            <div className="text-[11px] text-slate-500">Powered by Groq</div>
           </div>
         </div>
         <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 transition">
@@ -447,7 +447,7 @@ function AISummaryPanel({ resource, onClose }: { resource: EIResource; onClose: 
       {loading && (
         <div className="flex items-center gap-3 py-4">
           <Loader2 size={18} className="animate-spin text-cyan-500 shrink-0" />
-          <span className="text-sm text-slate-500 font-semibold">Gemini is reading this resource…</span>
+          <span className="text-sm text-slate-500 font-semibold">Groq is reading this resource…</span>
         </div>
       )}
 
@@ -512,7 +512,7 @@ function WorksheetGame({ resource, onFinish }: { resource: EIResource; onFinish:
         </div>
         <div>
           <div className="text-lg font-extrabold text-slate-900 mb-1">Ready for your scenario?</div>
-          <p className="text-sm text-slate-500 max-w-sm">Gemini will generate a unique workplace situation for you to navigate using emotional intelligence. Each playthrough is different!</p>
+          <p className="text-sm text-slate-500 max-w-sm">Groq will generate a unique workplace situation for you to navigate using emotional intelligence. Each playthrough is different!</p>
         </div>
         <div className="rounded-2xl border border-cyan-100 bg-cyan-50 px-5 py-3 text-xs text-cyan-700 font-semibold max-w-sm">
           💡 You will make choices across 3 scenes. There are no wrong answers — your EI skills are what matter.
@@ -530,7 +530,7 @@ function WorksheetGame({ resource, onFinish }: { resource: EIResource; onFinish:
       <div className="flex flex-col items-center py-16 gap-4">
         <Loader2 size={36} className="animate-spin text-cyan-500" />
         <p className="text-sm text-slate-500 font-semibold text-center">
-          Gemini is crafting your scenario…<br />
+          Groq is crafting your scenario…<br />
           <span className="text-xs text-slate-400">This may take a few seconds</span>
         </p>
       </div>
@@ -1081,7 +1081,7 @@ export default function ResourcesPage() {
                   </div>
                 </div>
                 <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-xs font-bold text-cyan-700 mb-5">
-                  <Brain size={12} /> AI-Generated Scenario · Powered by Gemini
+                  <Brain size={12} /> AI-Generated Scenario · Powered by Groq
                 </div>
                 <WorksheetGame resource={activeResource} onFinish={handleWorksheetFinish} />
               </div>
