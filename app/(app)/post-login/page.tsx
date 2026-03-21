@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { getLevelFromXP } from "@/lib/gamification";
 import OnboardingModal from "@/app/components/OnboardingModal";
+import EmotionCard from "@/app/components/EmotionCard"; // ✅ NEW
 import Cropper from "react-easy-crop";
 import {
   Mail, BadgeCheck, Building2, Flame, Sparkles, Plus, Circle,
@@ -115,7 +116,6 @@ export default function PostLoginPage() {
       const u = data.user;
       const md: any = u.user_metadata || {};
 
-      // ✅ FIXED: clean profile fetch
       let dbProfile: any = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
@@ -124,14 +124,6 @@ export default function PostLoginPage() {
             .select("id, full_name, nickname, role, department, created_at, avatar_url, age, gender, ei_identify_level, one_word_self, onboarding_completed")
             .eq("id", u.id)
             .maybeSingle();
-
-          // ✅ DEBUG — check browser console F12
-          console.log("=== PROFILE FETCH DEBUG ===");
-          console.log("Profile data:", p);
-          console.log("Profile error:", pErr);
-          console.log("onboarding_completed:", p?.onboarding_completed);
-          console.log("===========================");
-
           if (!pErr && p) { dbProfile = p; break; }
         } catch { /* retry */ }
         await new Promise(res => setTimeout(res, 400));
@@ -170,8 +162,6 @@ export default function PostLoginPage() {
       const role: AppRole = (dbProfile?.role ?? md?.role ?? "EMPLOYEE") as AppRole;
       const deptRaw = (dbProfile?.department ?? md?.department ?? "") as string;
       const department = String(role).toUpperCase() === "HR" ? "Human Resources" : deptRaw || "—";
-
-      // ✅ ONLY trust the boolean from DB
       const onboardingDone = dbProfile?.onboarding_completed === true;
 
       if (alive) {
@@ -194,7 +184,6 @@ export default function PostLoginPage() {
           one_word_self: dbProfile?.one_word_self ?? null,
           onboarding_completed: onboardingDone,
         });
-
         if (!onboardingDone) setShowOnboarding(true);
         setLoading(false);
       }
@@ -453,34 +442,42 @@ export default function PostLoginPage() {
           </div>
         </section>
 
-        {/* Today's Focus */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-1">
-            <div className="text-sm font-extrabold text-slate-900">Today&#39;s Focus</div>
-            <div className="text-xs text-slate-400">{tasks.length} remaining</div>
-          </div>
-          <p className="text-xs text-slate-500 mb-4">Add tasks and tick them off when done.</p>
-          <div className="flex gap-2">
-            <input value={taskText} onChange={(e) => setTaskText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addTask(); }} placeholder="Add a task..."
-              className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300 focus:bg-white transition" />
-            <button type="button" onClick={addTask} className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-teal-500 to-cyan-500 text-white hover:opacity-95 transition">
-              <Plus size={16} />
-            </button>
-          </div>
-          <div className="mt-3 space-y-2">
-            {tasks.length === 0
-              ? <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-400">All done! 🎉</div>
-              : tasks.map((t) => (
-                <button key={t.id} type="button" onClick={() => completeTask(t.id)}
-                  className="group flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left hover:bg-slate-50 hover:border-cyan-200 transition">
-                  <span className="text-slate-300 group-hover:text-cyan-400 transition shrink-0"><Circle size={16} /></span>
-                  <span className="text-sm font-semibold text-slate-800 group-hover:text-cyan-700 transition flex-1">{t.text}</span>
-                  <CheckCircle2 size={14} className="text-slate-200 group-hover:text-cyan-400 transition shrink-0" />
-                </button>
-              ))}
-          </div>
-          <p className="mt-3 text-xs text-slate-400">Click a task to mark it complete.</p>
-        </section>
+        {/* ✅ RIGHT COLUMN — Emotion Card above Today's Focus */}
+        <div className="flex flex-col gap-4">
+
+          {/* ✅ NEW: Emotion Check-in Card */}
+          <EmotionCard userId={profile.id} department={profile.department} />
+
+          {/* Today's Focus */}
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-sm font-extrabold text-slate-900">Today&#39;s Focus</div>
+              <div className="text-xs text-slate-400">{tasks.length} remaining</div>
+            </div>
+            <p className="text-xs text-slate-500 mb-4">Add tasks and tick them off when done.</p>
+            <div className="flex gap-2">
+              <input value={taskText} onChange={(e) => setTaskText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addTask(); }} placeholder="Add a task..."
+                className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300 focus:bg-white transition" />
+              <button type="button" onClick={addTask} className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-teal-500 to-cyan-500 text-white hover:opacity-95 transition">
+                <Plus size={16} />
+              </button>
+            </div>
+            <div className="mt-3 space-y-2">
+              {tasks.length === 0
+                ? <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-400">All done! 🎉</div>
+                : tasks.map((t) => (
+                  <button key={t.id} type="button" onClick={() => completeTask(t.id)}
+                    className="group flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left hover:bg-slate-50 hover:border-cyan-200 transition">
+                    <span className="text-slate-300 group-hover:text-cyan-400 transition shrink-0"><Circle size={16} /></span>
+                    <span className="text-sm font-semibold text-slate-800 group-hover:text-cyan-700 transition flex-1">{t.text}</span>
+                    <CheckCircle2 size={14} className="text-slate-200 group-hover:text-cyan-400 transition shrink-0" />
+                  </button>
+                ))}
+            </div>
+            <p className="mt-3 text-xs text-slate-400">Click a task to mark it complete.</p>
+          </section>
+
+        </div>
       </div>
 
       {/* Announcements */}
