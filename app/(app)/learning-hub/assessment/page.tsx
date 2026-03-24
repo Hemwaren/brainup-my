@@ -1,644 +1,426 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import {
-  ArrowLeft,
-  Brain,
-  CheckCircle2,
-  ChevronRight,
-  ClipboardList,
-  RotateCcw,
-  Save,
-  Sparkles,
-} from "lucide-react";
+import { ArrowLeft, Brain, ChevronRight, ClipboardList, Sparkles, CheckCircle2, RotateCcw } from "lucide-react";
 
-type Pillar = "KNOW_YOURSELF" | "CHOOSE_YOURSELF" | "GIVE_YOURSELF";
-
-type Likert = 1 | 2 | 3 | 4 | 5;
-
-type Question = {
-  id: string;
-  pillar: Pillar;
-  skill: string;
-  text: string;
-  reverse?: boolean;
-};
-
-type ResultSkill = {
-  pillar: Pillar;
-  skill: string;
-  scorePct: number;
-};
-
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
-}
-
-function scoreToPct(avgLikert: number) {
-  const pct = ((avgLikert - 1) / 4) * 100;
-  return clamp(Math.round(pct), 0, 100);
-}
-
-function labelPillar(p: Pillar) {
-  if (p === "KNOW_YOURSELF") return "Know Yourself";
-  if (p === "CHOOSE_YOURSELF") return "Choose Yourself";
-  return "Give Yourself";
-}
-
-function pillarDesc(p: Pillar) {
-  if (p === "KNOW_YOURSELF")
-    return "Awareness of emotions, triggers, and patterns.";
-  if (p === "CHOOSE_YOURSELF")
-    return "Managing reactions, motivation, and decisions.";
-  return "Empathy, trust, and positive impact on others.";
-}
-
-function levelFromScore(overallPct: number) {
-  if (overallPct >= 80) return { label: "Excellent", tone: "text-emerald-700 bg-emerald-50 border-emerald-200" };
-  if (overallPct >= 65) return { label: "Strong", tone: "text-sky-700 bg-sky-50 border-sky-200" };
-  if (overallPct >= 45) return { label: "Developing", tone: "text-amber-700 bg-amber-50 border-amber-200" };
-  return { label: "Needs Attention", tone: "text-rose-700 bg-rose-50 border-rose-200" };
-}
-
-function bandLabel(pct: number) {
-  if (pct >= 75) return "High";
-  if (pct >= 50) return "Medium";
-  return "Low";
-}
-
-function reverseLikert(v: Likert): Likert {
-  return (6 - v) as Likert;
-}
-
-const QUESTIONS: Question[] = [
-  { id: "q1", pillar: "KNOW_YOURSELF", skill: "Emotional Awareness", text: "I can clearly name what I'm feeling in the moment." },
-  { id: "q2", pillar: "KNOW_YOURSELF", skill: "Emotional Awareness", text: "I notice emotional changes in my body (e.g., tension, breathing) before I react." },
-  { id: "q3", pillar: "KNOW_YOURSELF", skill: "Triggers & Patterns", text: "I know what situations or people tend to trigger my stress." },
-  { id: "q4", pillar: "KNOW_YOURSELF", skill: "Triggers & Patterns", text: "I can spot repeating emotional patterns in my behavior over time." },
-  { id: "q5", pillar: "KNOW_YOURSELF", skill: "Self-Understanding", text: "I understand why I feel the way I feel, not just what I feel." },
-  { id: "q6", pillar: "KNOW_YOURSELF", skill: "Self-Understanding", text: "When I'm upset, I can usually identify the real cause." },
-  { id: "q7", pillar: "KNOW_YOURSELF", skill: "Confidence & Clarity", text: "I often feel confused about my emotions.", reverse: true },
-  { id: "q8", pillar: "CHOOSE_YOURSELF", skill: "Emotional Control", text: "When things go wrong, I can pause before reacting." },
-  { id: "q9", pillar: "CHOOSE_YOURSELF", skill: "Emotional Control", text: "I can stay calm during disagreements." },
-  { id: "q10", pillar: "CHOOSE_YOURSELF", skill: "Stress Handling", text: "Stress quickly overwhelms me.", reverse: true },
-  { id: "q11", pillar: "CHOOSE_YOURSELF", skill: "Stress Handling", text: "Even under pressure, I can still think clearly." },
-  { id: "q12", pillar: "CHOOSE_YOURSELF", skill: "Motivation", text: "I stay motivated even when progress feels slow." },
-  { id: "q13", pillar: "CHOOSE_YOURSELF", skill: "Decision-Making", text: "I make better decisions when I consider both facts and feelings." },
-  { id: "q14", pillar: "CHOOSE_YOURSELF", skill: "Optimism", text: "I tend to assume things will go badly.", reverse: true },
-  { id: "q15", pillar: "GIVE_YOURSELF", skill: "Empathy", text: "I can usually sense how others feel, even if they don't say it." },
-  { id: "q16", pillar: "GIVE_YOURSELF", skill: "Empathy", text: "I consider others' feelings before I speak or act." },
-  { id: "q17", pillar: "GIVE_YOURSELF", skill: "Trust & Relationships", text: "People often feel comfortable opening up to me." },
-  { id: "q18", pillar: "GIVE_YOURSELF", skill: "Trust & Relationships", text: "I struggle to see things from another person's perspective.", reverse: true },
-  { id: "q19", pillar: "GIVE_YOURSELF", skill: "Purpose & Impact", text: "I care about contributing positively to the people around me." },
-  { id: "q20", pillar: "GIVE_YOURSELF", skill: "Purpose & Impact", text: "My actions usually align with my values." },
+// ── 18 Mendeley Questions ─────────────────────────────────────────
+const QUESTIONS = [
+  { id: 1,  dim: "EA",  label: "😤 Emotional Awareness",     text: "I am aware of my personal feelings when meeting someone." },
+  { id: 2,  dim: "EU",  label: "🔥 Emotion Usage",           text: "I always evaluate the importance of work and events to myself." },
+  { id: 3,  dim: "EUS", label: "❤️ Emotional Understanding",  text: "I know when to share my own problems with others." },
+  { id: 4,  dim: "EC",  label: "🧭 Emotional Controlling",    text: "I know how to maintain positive emotions." },
+  { id: 5,  dim: "EA",  label: "😤 Emotional Awareness",     text: "I know the content I want to convey to others when working in a team." },
+  { id: 6,  dim: "EU",  label: "🔥 Emotion Usage",           text: "My ability to come up with new ideas is affected by my mood." },
+  { id: 7,  dim: "EUS", label: "❤️ Emotional Understanding",  text: "When communicating, I know how to arrange content so listeners feel comfortable." },
+  { id: 8,  dim: "EC",  label: "🧭 Emotional Controlling",    text: "I always create positive motivation when taking on a job." },
+  { id: 9,  dim: "EA",  label: "😤 Emotional Awareness",     text: "I can feel and capture the emotions of other team members." },
+  { id: 10, dim: "EU",  label: "🔥 Emotion Usage",           text: "My problem-solving ability is affected by mood." },
+  { id: 11, dim: "EUS", label: "❤️ Emotional Understanding",  text: "When I need to express myself, I always know how to make an impression." },
+  { id: 12, dim: "EC",  label: "🧭 Emotional Controlling",    text: "I always control my emotions in every situation." },
+  { id: 13, dim: "EA",  label: "😤 Emotional Awareness",     text: "When my emotions change at work, I know clearly why." },
+  { id: 14, dim: "EU",  label: "🔥 Emotion Usage",           text: "My responsibilities and enthusiasm for work are influenced by mood." },
+  { id: 15, dim: "EUS", label: "❤️ Emotional Understanding",  text: "I empathize with the stories others share with me." },
+  { id: 16, dim: "EA",  label: "😤 Emotional Awareness",     text: "I feel the evaluation through hidden meanings of group members." },
+  { id: 17, dim: "EU",  label: "🔥 Emotion Usage",           text: "Emotions are one of the most meaningful things in my life." },
+  { id: 18, dim: "EUS", label: "❤️ Emotional Understanding",  text: "I always believe in myself to do a good job." },
 ];
 
-const OPTIONS: { label: string; value: Likert }[] = [
-  { label: "Strongly disagree", value: 1 },
+const OPTIONS = [
+  { label: "Strongly Disagree", value: 1 },
   { label: "Disagree", value: 2 },
   { label: "Neutral", value: 3 },
   { label: "Agree", value: 4 },
-  { label: "Strongly agree", value: 5 },
+  { label: "Strongly Agree", value: 5 },
 ];
+
+const BRAIN_STYLE_DESC: Record<string, { emoji: string; traits: string; desc: string }> = {
+  Sage:      { emoji: "🧙", traits: "Wise · Empathetic · Thoughtful",    desc: "You process emotions deeply and guide others with wisdom." },
+  Energizer: { emoji: "⚡", traits: "Dynamic · Creative · Practical",    desc: "You use emotions to fuel action and inspire those around you." },
+  Guardian:  { emoji: "🛡️", traits: "Loyal · Caring · Stable",          desc: "You protect team harmony and provide emotional stability." },
+  Visionary: { emoji: "🔭", traits: "Passionate · Transformative · Bold",desc: "You channel emotions into big ideas and long-term change." },
+  Deliverer: { emoji: "🎯", traits: "Focused · Reliable · Efficient",    desc: "You use logic and emotion to consistently deliver results." },
+  Strategist:{ emoji: "♟️", traits: "Precise · Careful · Future-focused",desc: "You plan with both heart and mind to achieve lasting goals." },
+  Inventor:  { emoji: "💡", traits: "Curious · Analytical · Creative",   desc: "You combine logic with imagination to create new solutions." },
+  Scientist: { emoji: "🔬", traits: "Methodical · Objective · Sharp",    desc: "You analyse emotions with precision to optimise performance." },
+};
+
+function ScoreBar({ label, score }: { label: string; score: number }) {
+  return (
+    <div>
+      <div className="flex justify-between text-xs mb-1">
+        <span className="font-bold text-slate-700">{label}</span>
+        <span className="font-extrabold text-slate-900">{score.toFixed(1)}/100</span>
+      </div>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+        <div className="h-full bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 transition-all"
+          style={{ width: `${score}%` }} />
+      </div>
+    </div>
+  );
+}
 
 export default function AssessmentPage() {
   const router = useRouter();
-
-  const [loadingUser, setLoadingUser] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
-
-  const [step, setStep] = useState<"INTRO" | "TEST" | "RESULTS">("INTRO");
+  const [token, setToken] = useState<string | null>(null);
+  const [step, setStep] = useState<"INTRO" | "PHASE1" | "ML_INTERSTITIAL" | "PHASE2" | "PROCESSING" | "RESULTS">("INTRO");
   const [idx, setIdx] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, Likert>>({});
-  const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [answers, setAnswers] = useState<Record<number, number>>({});
+  const [mlPrediction, setMlPrediction] = useState<number | null>(null);
+  const [results, setResults] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    let alive = true;
-    async function loadUser() {
-      setLoadingUser(true);
-      const { data, error } = await supabase.auth.getUser();
-      if (!alive) return;
-
-      if (error || !data?.user) {
-        setLoadingUser(false);
-        router.push("/auth");
-        return;
-      }
-
-      setUserId(data.user.id);
-      setLoadingUser(false);
-    }
-    loadUser();
-    return () => {
-      alive = false;
-    };
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) { router.push("/auth"); return; }
+      setUserId(session.user.id);
+      setToken(session.access_token);
+    });
   }, [router]);
 
-  const total = QUESTIONS.length;
   const current = QUESTIONS[idx];
+  const totalAnswered = Object.keys(answers).length;
+  const progressPct = Math.round((totalAnswered / 18) * 100);
 
-  const answeredCount = useMemo(() => Object.keys(answers).length, [answers]);
-  const progressPct = useMemo(() => {
-    if (total === 0) return 0;
-    return clamp(Math.round((answeredCount / total) * 100), 0, 100);
-  }, [answeredCount, total]);
-
-  const canNext = !!answers[current?.id];
-
-  function start() {
-    setStep("TEST");
-    setIdx(0);
-    setSaveMsg(null);
-  }
-
-  function setAnswer(qid: string, v: Likert) {
-    setAnswers((prev) => ({ ...prev, [qid]: v }));
+  function selectAnswer(value: number) {
+    setAnswers(prev => ({ ...prev, [current.id]: value }));
   }
 
   function next() {
-    if (idx < total - 1) setIdx((v) => v + 1);
-    else setStep("RESULTS");
+    if (idx < 8) {
+      // Phase 1: Q1-Q9
+      setIdx(idx + 1);
+    } else if (idx === 8) {
+      // After Q9 → ML prediction
+      callMLPrediction();
+    } else if (idx < 17) {
+      // Phase 2: Q10-Q17
+      setIdx(idx + 1);
+    } else {
+      // After Q18 → submit
+      submitAssessment();
+    }
   }
 
   function back() {
-    if (idx > 0) setIdx((v) => v - 1);
+    if (idx > 0) setIdx(idx - 1);
+  }
+
+  async function callMLPrediction() {
+    setStep("ML_INTERSTITIAL");
+    setLoading(true);
+    try {
+      const first9 = Array.from({ length: 9 }, (_, i) => answers[i + 1] ?? 3);
+      const res = await fetch("/api/assessment/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers: first9 }),
+      });
+      const data = await res.json();
+      setMlPrediction(data.predicted_ei ?? null);
+    } catch {
+      setMlPrediction(null);
+    }
+    setLoading(false);
+  }
+
+  function continueToPhase2() {
+    setIdx(9);
+    setStep("PHASE2");
+  }
+
+  async function submitAssessment() {
+    setStep("PROCESSING");
+    try {
+      const allAnswers = Array.from({ length: 18 }, (_, i) => answers[i + 1] ?? 3);
+      const res = await fetch("/api/assessment/submit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({ answers: allAnswers, ml_predicted_ei: mlPrediction }),
+      });
+      const data = await res.json();
+      setResults(data);
+
+      // Award XP
+      if (token) {
+        fetch("/api/gamification/award-xp", {
+          method: "POST",
+          headers: { "content-type": "application/json", "authorization": `Bearer ${token}` },
+          body: JSON.stringify({ activityKey: "full_ei_assessment" }),
+        }).catch(() => {});
+      }
+
+      setStep("RESULTS");
+    } catch {
+      setStep("RESULTS");
+    }
   }
 
   function restart() {
     setAnswers({});
     setIdx(0);
+    setMlPrediction(null);
+    setResults(null);
     setStep("INTRO");
-    setSaveMsg(null);
   }
 
-  const computed = useMemo(() => {
-    const scored = QUESTIONS.map((q) => {
-      const raw = answers[q.id];
-      if (!raw) return null;
-      const v = q.reverse ? reverseLikert(raw) : raw;
-      return { ...q, value: v };
-    }).filter(Boolean) as Array<Question & { value: Likert }>;
+  // ── INTRO ──────────────────────────────────────────────────────
+  if (step === "INTRO") return (
+    <div className="max-w-2xl mx-auto px-4 py-6">
+      <div className="mb-5 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white shadow-sm">
+            <ClipboardList size={18} />
+          </span>
+          <h1 className="text-xl font-extrabold text-slate-900">EI Assessment Engine</h1>
+        </div>
+        <button onClick={() => router.push("/post-login")}
+          className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-extrabold text-slate-800 hover:bg-slate-50">
+          <ArrowLeft size={16} /> Back
+        </button>
+      </div>
 
-    const overallAvg =
-      scored.length === 0
-        ? 0
-        : scored.reduce((sum, s) => sum + s.value, 0) / scored.length;
-    const overallPct = scoreToPct(overallAvg);
-
-    const pillars: Record<Pillar, number> = {
-      KNOW_YOURSELF: 0,
-      CHOOSE_YOURSELF: 0,
-      GIVE_YOURSELF: 0,
-    };
-    const pillarCounts: Record<Pillar, number> = {
-      KNOW_YOURSELF: 0,
-      CHOOSE_YOURSELF: 0,
-      GIVE_YOURSELF: 0,
-    };
-
-    for (const s of scored) {
-      pillars[s.pillar] += s.value;
-      pillarCounts[s.pillar] += 1;
-    }
-
-    const pillarPct: Record<Pillar, number> = {
-      KNOW_YOURSELF: pillarCounts.KNOW_YOURSELF
-        ? scoreToPct(pillars.KNOW_YOURSELF / pillarCounts.KNOW_YOURSELF)
-        : 0,
-      CHOOSE_YOURSELF: pillarCounts.CHOOSE_YOURSELF
-        ? scoreToPct(pillars.CHOOSE_YOURSELF / pillarCounts.CHOOSE_YOURSELF)
-        : 0,
-      GIVE_YOURSELF: pillarCounts.GIVE_YOURSELF
-        ? scoreToPct(pillars.GIVE_YOURSELF / pillarCounts.GIVE_YOURSELF)
-        : 0,
-    };
-
-    const skillMap = new Map<string, { pillar: Pillar; sum: number; count: number }>();
-    for (const s of scored) {
-      const key = `${s.pillar}__${s.skill}`;
-      const prev = skillMap.get(key) ?? { pillar: s.pillar, sum: 0, count: 0 };
-      skillMap.set(key, { pillar: s.pillar, sum: prev.sum + s.value, count: prev.count + 1 });
-    }
-
-    const skills: ResultSkill[] = Array.from(skillMap.entries()).map(([key, v]) => {
-      const skill = key.split("__")[1] ?? "Skill";
-      const avg = v.count ? v.sum / v.count : 0;
-      return { pillar: v.pillar, skill, scorePct: scoreToPct(avg) };
-    });
-
-    skills.sort((a, b) => b.scorePct - a.scorePct);
-
-    const top2 = skills.slice(0, 2);
-    const bottom2 = [...skills].reverse().slice(0, 2);
-
-    const lvl = levelFromScore(overallPct);
-
-    return { overallPct, pillarPct, skills, top2, bottom2, level: lvl };
-  }, [answers]);
-
-  // ✅ CHANGED: added XP award after successful save
-  async function saveResults() {
-    if (!userId) return;
-    setSaving(true);
-    setSaveMsg(null);
-
-    try {
-      await supabase.from("ei_assessment_results").insert({
-        user_id: userId,
-        overall_score: computed.overallPct,
-        know_yourself: computed.pillarPct.KNOW_YOURSELF,
-        choose_yourself: computed.pillarPct.CHOOSE_YOURSELF,
-        give_yourself: computed.pillarPct.GIVE_YOURSELF,
-        answers_json: answers,
-        created_at: new Date().toISOString(),
-      });
-      setSaveMsg("Saved! Your results are stored.");
-
-      // Award XP for completing full EI assessment
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        fetch("/api/gamification/award-xp", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ activityKey: "full_ei_assessment" }),
-        }).catch(() => {});
-      }
-    } catch {
-      setSaveMsg("Couldn't save (table not set yet). Results still shown on screen.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (loadingUser) {
-    return (
-      <div className="min-h-screen bg-[#f7fbff]">
-        <div className="mx-auto flex min-h-screen max-w-4xl items-center justify-center px-6">
-          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white shadow-sm">
-                <Brain size={18} />
-              </div>
-              <div className="text-base font-extrabold text-slate-900">BrainUp</div>
-            </div>
-            <div className="mt-6 h-2 w-full overflow-hidden rounded-full bg-slate-200">
-              <div className="h-full w-1/2 bg-slate-700" />
-            </div>
-            <p className="mt-3 text-sm text-slate-600">Loading assessment…</p>
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-start gap-4">
+          <div className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white shrink-0">
+            <Sparkles size={20} />
           </div>
+          <div>
+            <h2 className="text-lg font-extrabold text-slate-900">Discover Your EI Profile</h2>
+            <p className="mt-1 text-sm text-slate-500">Based on the validated BEIS psychometric framework</p>
+            <div className="mt-4 grid grid-cols-3 gap-3">
+              {[["18", "Questions"], ["4", "Dimensions"], ["~4 mins", "Duration"]].map(([val, lab]) => (
+                <div key={lab} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
+                  <div className="text-lg font-extrabold text-cyan-600">{val}</div>
+                  <div className="text-xs text-slate-500">{lab}</div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 space-y-1.5 text-sm text-slate-600">
+              <div>✅ ML-powered early prediction at Q9</div>
+              <div>✅ Personalised AI feedback via Groq</div>
+              <div>✅ Brain Style determination</div>
+              <div>✅ No right or wrong answers — be honest!</div>
+            </div>
+            <button onClick={() => setStep("PHASE1")}
+              className="mt-5 rounded-2xl bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 px-6 py-3 text-sm font-extrabold text-white hover:opacity-95">
+              Begin Assessment →
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── QUESTION SCREEN ────────────────────────────────────────────
+  if (step === "PHASE1" || step === "PHASE2") return (
+    <div className="max-w-2xl mx-auto px-4 py-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        {/* Phase indicator */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2 text-xs font-bold">
+            <span className={`rounded-full px-3 py-1 ${step === "PHASE1" ? "bg-cyan-500 text-white" : "bg-slate-200 text-slate-500"}`}>Phase 1</span>
+            <span className="text-slate-300">→</span>
+            <span className="rounded-full bg-slate-200 px-3 py-1 text-slate-500">ML Prediction</span>
+            <span className="text-slate-300">→</span>
+            <span className={`rounded-full px-3 py-1 ${step === "PHASE2" ? "bg-cyan-500 text-white" : "bg-slate-200 text-slate-500"}`}>Phase 2</span>
+          </div>
+          <span className="text-xs text-slate-400 font-bold">{progressPct}%</span>
+        </div>
+
+        {/* Progress bar */}
+        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200 mb-4">
+          <div className="h-full bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 transition-all"
+            style={{ width: `${progressPct}%` }} />
+        </div>
+
+        {/* Question */}
+        <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600 mb-3">
+          {current.label} · Q{current.id} of 18
+        </div>
+        <p className="text-lg font-extrabold text-slate-900 mb-1">{current.text}</p>
+        <p className="text-sm text-slate-500 mb-4">Select the option that best describes you.</p>
+
+        {/* Options */}
+        <div className="space-y-2 mb-5">
+          {OPTIONS.map(o => {
+            const selected = answers[current.id] === o.value;
+            return (
+              <button key={o.value} onClick={() => selectAnswer(o.value)}
+                className={`flex w-full items-center justify-between gap-3 rounded-2xl border p-3 text-left transition ${selected ? "border-cyan-500 bg-cyan-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}>
+                <span className="text-sm font-semibold text-slate-800">{o.label}</span>
+                <span className={`grid h-7 w-7 place-items-center rounded-full text-xs font-extrabold ${selected ? "bg-cyan-500 text-white" : "bg-slate-100 text-slate-600"}`}>
+                  {o.value}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Navigation */}
+        <div className="flex items-center justify-between">
+          <button onClick={back} disabled={idx === 0}
+            className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-extrabold text-slate-600 hover:bg-slate-50 disabled:opacity-40">
+            Back
+          </button>
+          <button onClick={next} disabled={!answers[current.id]}
+            className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 px-5 py-2 text-sm font-extrabold text-white disabled:opacity-40">
+            {idx === 8 ? "Get ML Prediction" : idx === 17 ? "Finish" : "Next"}
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── ML INTERSTITIAL ────────────────────────────────────────────
+  if (step === "ML_INTERSTITIAL") return (
+    <div className="max-w-2xl mx-auto px-4 py-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm text-center">
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white mb-4">
+          <Brain size={28} />
+        </div>
+        <h2 className="text-xl font-extrabold text-slate-900 mb-2">🤖 AI Early Prediction</h2>
+        <p className="text-sm text-slate-500 mb-6">Based on your first 9 answers, our Random Forest model trained on 372 real university students predicts:</p>
+
+        {loading ? (
+          <div className="text-slate-400 text-sm animate-pulse">Analysing your responses...</div>
+        ) : (
+          <>
+            <div className="rounded-2xl border-2 border-cyan-200 bg-cyan-50 p-6 mb-6">
+              <div className="text-5xl font-extrabold text-cyan-600 mb-1">
+                {mlPrediction?.toFixed(1) ?? "—"}
+              </div>
+              <div className="text-sm font-bold text-cyan-500">Predicted EI Score / 100</div>
+              <div className="text-xs text-slate-400 mt-2">Complete 9 more questions for your accurate score!</div>
+            </div>
+            <button onClick={continueToPhase2}
+              className="rounded-2xl bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 px-8 py-3 text-sm font-extrabold text-white hover:opacity-95">
+              Continue to Phase 2 →
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  // ── PROCESSING ─────────────────────────────────────────────────
+  if (step === "PROCESSING") return (
+    <div className="max-w-2xl mx-auto px-4 py-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm text-center">
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white mb-4 animate-pulse">
+          <Brain size={28} />
+        </div>
+        <h2 className="text-xl font-extrabold text-slate-900 mb-6">Analysing Your Results...</h2>
+        <div className="space-y-3 text-left max-w-xs mx-auto">
+          {["Collecting all 18 responses", "Applying BEIS scoring algorithm", "Calculating 4 EI dimensions", "Determining your Brain Style", "Generating AI feedback with Groq"].map((s, i) => (
+            <div key={i} className="flex items-center gap-3 text-sm text-slate-600">
+              <div className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />
+              {s}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── RESULTS ────────────────────────────────────────────────────
+  if (step === "RESULTS" && results) {
+    const brainInfo = BRAIN_STYLE_DESC[results.brain_style] ?? BRAIN_STYLE_DESC["Visionary"];
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-extrabold text-slate-900">Your EI Profile 🎉</h1>
+          <button onClick={restart}
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-extrabold text-slate-700 hover:bg-slate-50">
+            <RotateCcw size={14} /> Retake
+          </button>
+        </div>
+
+        {/* Overall Score + ML comparison */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm text-center">
+            <div className="text-xs font-bold text-slate-500 mb-1">Overall EI Score</div>
+            <div className="text-5xl font-extrabold text-cyan-600">{results.overall?.toFixed(1)}</div>
+            <div className="text-sm text-slate-400 mt-1">out of 100</div>
+          </div>
+          <div className="rounded-2xl border border-cyan-100 bg-cyan-50 p-5 shadow-sm text-center">
+            <div className="text-xs font-bold text-cyan-600 mb-1">🤖 ML Predicted at Q9</div>
+            <div className="text-4xl font-extrabold text-cyan-700">{mlPrediction?.toFixed(1) ?? "—"}</div>
+            <div className="text-xs text-cyan-500 mt-1">
+              {mlPrediction ? `${Math.abs(results.overall - mlPrediction).toFixed(1)} pts difference` : ""}
+            </div>
+          </div>
+        </div>
+
+        {/* Brain Style */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-sm font-extrabold text-slate-500 mb-3">🧠 Your Brain Style</div>
+          <div className="flex items-center gap-4">
+            <div className="text-5xl">{brainInfo.emoji}</div>
+            <div>
+              <div className="text-2xl font-extrabold text-slate-900">{results.brain_style}</div>
+              <div className="text-xs text-slate-500 mt-0.5">{brainInfo.traits}</div>
+              <p className="text-sm text-slate-600 mt-1">{brainInfo.desc}</p>
+            </div>
+          </div>
+          <div className="mt-3 flex gap-2 flex-wrap">
+            {[["Focus", results.brain_focus], ["Decisions", results.brain_decisions], ["Drive", results.brain_drive]].map(([k, v]) => (
+              <span key={k} className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-bold text-cyan-700">
+                {k}: {v}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Dimension scores */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+          <div className="text-sm font-extrabold text-slate-900 mb-2">📊 4 EI Dimensions</div>
+          <ScoreBar label="😤 Emotional Awareness" score={results.ea} />
+          <ScoreBar label="🔥 Emotion Usage" score={results.eu} />
+          <ScoreBar label="❤️ Emotional Understanding" score={results.eus} />
+          <ScoreBar label="🧭 Emotional Controlling" score={results.ec} />
+        </div>
+
+        {/* Groq Feedback */}
+        {results.groq_feedback && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="text-sm font-extrabold text-slate-900 mb-3">✍️ AI Personalised Feedback</div>
+            <div className="space-y-3">
+              {[
+                ["😤 Emotional Awareness", results.groq_feedback.ea_feedback],
+                ["🔥 Emotion Usage", results.groq_feedback.eu_feedback],
+                ["❤️ Emotional Understanding", results.groq_feedback.eus_feedback],
+                ["🧭 Emotional Controlling", results.groq_feedback.ec_feedback],
+              ].map(([dim, text]) => text && (
+                <div key={dim} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <div className="text-xs font-extrabold text-slate-700 mb-1">{dim}</div>
+                  <p className="text-sm text-slate-600">{text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex gap-3">
+          <button onClick={() => router.push("/learning-hub/resources")}
+            className="flex-1 rounded-2xl bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 py-3 text-sm font-extrabold text-white hover:opacity-95">
+            📚 View Resources
+          </button>
+          <button onClick={restart}
+            className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-extrabold text-slate-700 hover:bg-slate-50">
+            <RotateCcw size={16} />
+          </button>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-[#f7fbff]">
-      <div className="mx-auto max-w-4xl px-4 py-6">
-        <div className="mb-5 flex items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white shadow-sm">
-                <ClipboardList size={18} />
-              </span>
-              <h1 className="text-xl font-extrabold text-slate-900">EI Assessment</h1>
-            </div>
-            <p className="mt-1 text-sm text-slate-600">
-              A short 20-question self-assessment based on 3 EI pillars: Know, Choose, Give.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => router.push("/post-login")}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-extrabold text-slate-800 hover:bg-slate-50"
-          >
-            <ArrowLeft size={16} />
-            Back
-          </button>
-        </div>
-
-        {step === "INTRO" && (
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-start gap-4">
-              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-slate-900 text-white">
-                <Sparkles size={18} />
-              </div>
-              <div className="flex-1">
-                <div className="text-base font-extrabold text-slate-900">
-                  Before you start
-                </div>
-                <ul className="mt-2 space-y-2 text-sm text-slate-600">
-                  <li>• No right or wrong answers — respond honestly.</li>
-                  <li>• Takes about 3–5 minutes.</li>
-                  <li>• You'll get an overall EI score + breakdown by pillars and skills.</li>
-                </ul>
-
-                <div className="mt-5 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={start}
-                    className="rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-extrabold text-white hover:opacity-95"
-                  >
-                    Start Assessment
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => router.push("/learning-hub/resources")}
-                    className="rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-extrabold text-slate-800 hover:bg-slate-50"
-                  >
-                    View Resources
-                  </button>
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {step === "TEST" && current && (
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-extrabold text-slate-900">
-                Question {idx + 1} / {total}
-              </div>
-              <div className="text-xs font-bold text-slate-500">{progressPct}% completed</div>
-            </div>
-            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200">
-              <div
-                className="h-full bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 transition-all"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-
-            <div className="mt-4 inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-extrabold text-slate-700">
-              {labelPillar(current.pillar)} • {current.skill}
-            </div>
-
-            <div className="mt-3 text-lg font-extrabold text-slate-900">{current.text}</div>
-            <div className="mt-1 text-sm text-slate-600">
-              Select the option that best describes you.
-            </div>
-
-            <div className="mt-4 space-y-2">
-              {OPTIONS.map((o) => {
-                const selected = answers[current.id] === o.value;
-                return (
-                  <button
-                    key={o.value}
-                    type="button"
-                    onClick={() => setAnswer(current.id, o.value)}
-                    className={[
-                      "flex w-full items-center justify-between gap-3 rounded-2xl border p-3 text-left transition",
-                      selected
-                        ? "border-slate-900 bg-slate-900 text-white"
-                        : "border-slate-200 bg-white hover:bg-slate-50",
-                    ].join(" ")}
-                  >
-                    <span className="text-sm font-semibold">{o.label}</span>
-                    <span
-                      className={[
-                        "grid h-7 w-7 place-items-center rounded-full text-xs font-extrabold",
-                        selected ? "bg-white text-slate-900" : "bg-slate-100 text-slate-700",
-                      ].join(" ")}
-                    >
-                      {o.value}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="mt-5 flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={back}
-                disabled={idx === 0}
-                className={[
-                  "rounded-2xl border px-4 py-2 text-sm font-extrabold transition",
-                  idx === 0
-                    ? "border-slate-200 bg-slate-50 text-slate-400"
-                    : "border-slate-200 bg-white text-slate-800 hover:bg-slate-50",
-                ].join(" ")}
-              >
-                Back
-              </button>
-
-              <button
-                type="button"
-                onClick={next}
-                disabled={!canNext}
-                className={[
-                  "inline-flex items-center gap-2 rounded-2xl px-5 py-2 text-sm font-extrabold transition",
-                  canNext ? "bg-slate-900 text-white hover:opacity-95" : "bg-slate-200 text-slate-500",
-                ].join(" ")}
-              >
-                {idx < total - 1 ? "Next" : "Finish"}
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </section>
-        )}
-
-        {step === "RESULTS" && (
-          <section className="space-y-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="text-base font-extrabold text-slate-900">Your Results</div>
-                  <div className="mt-1 text-sm text-slate-600">
-                    This is a self-assessment snapshot — skills can improve with practice.
-                  </div>
-                </div>
-
-                <div className={["inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-extrabold", computed.level.tone].join(" ")}>
-                  <CheckCircle2 size={14} />
-                  {computed.level.label}
-                </div>
-              </div>
-
-              <div className="mt-4 grid gap-3 md:grid-cols-3">
-                <ScoreCard title="Overall EI Score" value={`${computed.overallPct}%`} hint={bandLabel(computed.overallPct)} />
-                <ScoreCard title="Know Yourself" value={`${computed.pillarPct.KNOW_YOURSELF}%`} hint={bandLabel(computed.pillarPct.KNOW_YOURSELF)} />
-                <ScoreCard title="Choose Yourself" value={`${computed.pillarPct.CHOOSE_YOURSELF}%`} hint={bandLabel(computed.pillarPct.CHOOSE_YOURSELF)} />
-              </div>
-
-              <div className="mt-3 grid gap-3 md:grid-cols-3">
-                <ScoreCard title="Give Yourself" value={`${computed.pillarPct.GIVE_YOURSELF}%`} hint={bandLabel(computed.pillarPct.GIVE_YOURSELF)} />
-                <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-sm font-extrabold text-slate-900">Interpretation</div>
-                  <div className="mt-1 text-sm text-slate-600">
-                    Your strongest growth comes from building habits in your lowest skills.
-                    Aim for small daily improvements (5–10 minutes) for 2 weeks.
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="text-base font-extrabold text-slate-900">Pillars Breakdown</div>
-              <div className="mt-1 text-sm text-slate-600">
-                Know → awareness • Choose → regulation • Give → empathy & impact
-              </div>
-
-              <div className="mt-4 space-y-3">
-                <BarRow label="Know Yourself" desc={pillarDesc("KNOW_YOURSELF")} pct={computed.pillarPct.KNOW_YOURSELF} />
-                <BarRow label="Choose Yourself" desc={pillarDesc("CHOOSE_YOURSELF")} pct={computed.pillarPct.CHOOSE_YOURSELF} />
-                <BarRow label="Give Yourself" desc={pillarDesc("GIVE_YOURSELF")} pct={computed.pillarPct.GIVE_YOURSELF} />
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="text-base font-extrabold text-slate-900">Skill Breakdown</div>
-              <div className="mt-1 text-sm text-slate-600">
-                These are smaller skills inside the 3 pillars.
-              </div>
-
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                {computed.skills.map((s) => (
-                  <SkillCard
-                    key={`${s.pillar}-${s.skill}`}
-                    pillar={labelPillar(s.pillar)}
-                    skill={s.skill}
-                    pct={s.scorePct}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="text-base font-extrabold text-slate-900">Your Strengths</div>
-                <div className="mt-1 text-sm text-slate-600">Skills you can leverage immediately.</div>
-                <div className="mt-4 space-y-3">
-                  {computed.top2.map((s) => (
-                    <MiniSkill key={`top-${s.pillar}-${s.skill}`} title={s.skill} pct={s.scorePct} />
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="text-base font-extrabold text-slate-900">Growth Areas</div>
-                <div className="mt-1 text-sm text-slate-600">Focus here for the biggest improvement.</div>
-                <div className="mt-4 space-y-3">
-                  {computed.bottom2.map((s) => (
-                    <MiniSkill key={`bot-${s.pillar}-${s.skill}`} title={s.skill} pct={s.scorePct} />
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={saveResults}
-                  disabled={saving}
-                  className={[
-                    "inline-flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-extrabold transition",
-                    saving ? "bg-slate-200 text-slate-500" : "bg-slate-900 text-white hover:opacity-95",
-                  ].join(" ")}
-                >
-                  <Save size={16} />
-                  {saving ? "Saving..." : "Save Results"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={restart}
-                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-extrabold text-slate-800 hover:bg-slate-50"
-                >
-                  <RotateCcw size={16} />
-                  Retake
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => router.push("/learning-hub/resources")}
-                  className="rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-extrabold text-slate-800 hover:bg-slate-50"
-                >
-                  Go to Resources
-                </button>
-              </div>
-
-              {saveMsg && <div className="mt-3 text-sm text-slate-600">{saveMsg}</div>}
-            </div>
-          </section>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ScoreCard({ title, value, hint }: { title: string; value: string; hint: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="text-xs font-bold text-slate-500">{title}</div>
-      <div className="mt-1 text-2xl font-extrabold text-slate-900">{value}</div>
-      <div className="mt-1 text-xs font-bold text-slate-500">{hint}</div>
-    </div>
-  );
-}
-
-function BarRow({ label, desc, pct }: { label: string; desc: string; pct: number }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-sm font-extrabold text-slate-900">{label}</div>
-          <div className="mt-1 text-sm text-slate-600">{desc}</div>
-        </div>
-        <div className="text-sm font-extrabold text-slate-900">{pct}%</div>
-      </div>
-      <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200">
-        <div
-          className="h-full bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 transition-all"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function SkillCard({ pillar, skill, pct }: { pillar: string; skill: string; pct: number }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="text-xs font-bold text-slate-500">{pillar}</div>
-      <div className="mt-1 text-sm font-extrabold text-slate-900">{skill}</div>
-
-      <div className="mt-3 flex items-center justify-between text-xs">
-        <span className="font-bold text-slate-500">{bandLabel(pct)}</span>
-        <span className="font-extrabold text-slate-900">{pct}%</span>
-      </div>
-
-      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
-        <div
-          className="h-full bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 transition-all"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function MiniSkill({ title, pct }: { title: string; pct: number }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-sm font-extrabold text-slate-900">{title}</div>
-        <div className="text-sm font-extrabold text-slate-900">{pct}%</div>
-      </div>
-      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
-        <div
-          className="h-full bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 transition-all"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <div className="mt-2 text-xs font-bold text-slate-500">{bandLabel(pct)}</div>
-    </div>
-  );
+  return null;
 }
