@@ -34,37 +34,59 @@ async function detectEmotion(text: string): Promise<{ emotion: string; confidenc
   };
 }
 
-// ─── HuggingFace: Key Point Extraction ───────────────────────────────────────
+// ─── Groq LLM: Key Point Extraction (replaces broken BART) ───────────────────
+// BART on HuggingFace is unreliable and frequently rate-limited.
+// Groq is already used for vision/audio — use it for key points too.
 async function extractKeyPoints(text: string): Promise<string[]> {
-  const res = await fetch(
-    `${HF_API}/facebook/bart-large-cnn`,
-    {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${HF_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        inputs: text.slice(0, 1024),
-        parameters: { max_length: 80, min_length: 20, do_sample: false },
-      }),
-    }
-  );
+  const res = await fetch(GROQ_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${GROQ_KEY}`,
+    },
+    body: JSON.stringify({
+      model: "llama-3.1-8b-instant",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a concise journal assistant. Extract exactly 3 key points from the journal entry. Respond ONLY with a JSON array of 3 strings. No explanation, no markdown, no extra text. Example: [\"Point one.\", \"Point two.\", \"Point three.\"]",
+        },
+        {
+          role: "user",
+          content: text.slice(0, 1024),
+        },
+      ],
+      max_tokens: 200,
+      temperature: 0.3,
+    }),
+  });
 
   if (!res.ok) {
-    const err = await res.text();
-    console.error("HF BART error:", err);
-    throw new Error("Key point extraction failed.");
+    const err = await res.json();
+    console.error("Groq key points error:", err);
+    // Graceful fallback — return first sentence as single point
+    const fallback = text.split(/[.!?]/)[0]?.trim();
+    return fallback ? [fallback] : ["No key points extracted."];
   }
 
   const data = await res.json();
-  const summary: string = data[0]?.summary_text ?? "";
-  const sentences = summary
-    .split(/(?<=[.!?])\s+/)
-    .map((s: string) => s.trim())
-    .filter((s: string) => s.length > 10)
-    .slice(0, 3);
-  return sentences.length > 0 ? sentences : [summary];
+  const content: string = data?.choices?.[0]?.message?.content ?? "[]";
+
+  try {
+    // Strip any accidental markdown code fences
+    const cleaned = content.replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(cleaned);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed.map((s: string) => String(s).trim()).filter(Boolean).slice(0, 3);
+    }
+  } catch {
+    console.error("Failed to parse key points JSON:", content);
+  }
+
+  // Last resort fallback
+  const fallback = text.split(/[.!?]/)[0]?.trim();
+  return fallback ? [fallback] : ["No key points extracted."];
 }
 
 // ─── Groq Vision: Image → description ────────────────────────────────────────
@@ -168,14 +190,12 @@ export async function POST(req: NextRequest) {
 
     if (type === "VIDEO") {
       console.log("🎥 VIDEO entry — videoBase64 present:", !!videoBase64, "| imageBase64 present:", !!imageBase64);
-      const userText   = text ?? "";
+      const userText = text ?? "";
 
-      // Run transcript + vision in parallel for speed
       const [transcript, visionDesc] = await Promise.all([
         videoBase64
           ? transcribeAudio(videoBase64, videoMimeType ?? "video/mp4")
           : Promise.resolve(""),
-        // imageBase64 here is multiple frames combined (sent from client)
         imageBase64
           ? describeImage(imageBase64, imageMimeType ?? "image/jpeg")
           : Promise.resolve(""),
@@ -185,15 +205,11 @@ export async function POST(req: NextRequest) {
       console.log("🎥 Vision:", visionDesc?.substring(0, 200));
 
       const parts = [];
-
       if (transcript || visionDesc) {
-        // Priority 1: transcript + vision frames (most accurate)
         if (transcript) parts.push(`Speech: ${transcript}`);
         if (visionDesc) parts.push(`Visual: ${visionDesc}`);
-        // Priority 2: user description as supporting context
         if (userText)   parts.push(`Context: ${userText}`);
       } else {
-        // Fallback: only description available
         if (userText) parts.push(userText);
       }
 
