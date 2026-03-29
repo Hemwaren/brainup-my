@@ -114,10 +114,16 @@ function b64ToBytes(b64: string) {
 async function pbkdf2(pin: string, saltBytes: Uint8Array) {
   const enc = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(pin), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: "SHA-256", salt: saltBytes, iterations: 120_000 },
-    keyMaterial, 256
-  );
+const bits = await crypto.subtle.deriveBits(
+  {
+    name: "PBKDF2",
+    hash: "SHA-256",
+    salt: new Uint8Array(saltBytes),
+    iterations: 120_000,
+  },
+  keyMaterial,
+  256
+);
   return new Uint8Array(bits);
 }
 function constantTimeEqual(a: Uint8Array, b: Uint8Array) {

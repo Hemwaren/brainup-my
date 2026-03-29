@@ -368,8 +368,8 @@ export default function HRDashboardPage() {
                 <XAxis dataKey="department" tick={{ fontSize: 11 }} />
                 <YAxis domain={[0, 5]} tick={{ fontSize: 11 }} />
                 <Tooltip
-                  formatter={(value: number) => [`${value}`, "Avg Score"]}
-                />
+  formatter={(value) => [String(value ?? ""), "Avg Score"]}
+/>
                 <Bar dataKey="avg_score" fill="#0891b2" radius={[4, 4, 0, 0]} name="Avg Score" />
               </BarChart>
             </ResponsiveContainer>
