@@ -344,7 +344,7 @@ export default function HRDashboardPage() {
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                 <YAxis domain={[1, 5]} tick={{ fontSize: 11 }} />
                 <Tooltip
-                  formatter={(value: number) => [`${value}`, "Avg Level"]}
+                  formatter={(value) => [String(value ?? ""), "Avg Level"]}
                 />
                 <Line
                   type="monotone"
