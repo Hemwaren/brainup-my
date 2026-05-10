@@ -32,6 +32,7 @@ const NAV_PAGES = [
   { label: "Journal", href: "/journal", icon: <NotebookPen size={15} />, desc: "Your journal entries" },
   { label: "Gamification Stats", href: "/gamification/stats", icon: <BarChart3 size={15} />, desc: "XP and level progress" },
   { label: "Rewards", href: "/gamification/rewards", icon: <Gift size={15} />, desc: "Redeem stars for rewards" },
+  { label: "Social Area", href: "/gamification/social", icon: <Users size={15} />, desc: "Virtual HQ and social interaction" },
   { label: "HR Dashboard", href: "/hr/dashboard", icon: <LayoutGrid size={15} />, desc: "HR overview and analytics" },
   { label: "Consultations", href: "/hr/consultations", icon: <Users size={15} />, desc: "Schedule consultations" },
   { label: "Announcements", href: "/hr/announcements", icon: <Megaphone size={15} />, desc: "Manage announcements" },
@@ -416,10 +417,11 @@ function AppShell({ children }: { children: React.ReactNode }) {
         <NavLink href="/journal" icon={<NotebookPen size={16} />} label="Journal" active={isActive("/journal")} />
 
         <SectionLabel label="Growth" />
-        <CollapseGroup icon={<Trophy size={16} />} label="Gamification" open={gamificationOpen} onToggle={() => setGamificationOpen(v => !v)} active={isActive("/gamification")}>
-          <SubNavLink href="/gamification/stats" icon={<BarChart3 size={14} />} label="Stats" active={isActive("/gamification/stats")} />
-          <SubNavLink href="/gamification/rewards" icon={<Gift size={14} />} label="Rewards" active={isActive("/gamification/rewards")} />
-        </CollapseGroup>
+<CollapseGroup icon={<Trophy size={16} />} label="Gamification" open={gamificationOpen} onToggle={() => setGamificationOpen(v => !v)} active={isActive("/gamification")}>
+  <SubNavLink href="/gamification/stats" icon={<BarChart3 size={14} />} label="Stats" active={isActive("/gamification/stats")} />
+  <SubNavLink href="/gamification/rewards" icon={<Gift size={14} />} label="Rewards" active={isActive("/gamification/rewards")} />
+  <SubNavLink href="/gamification/social" icon={<Users size={14} />} label="Social Area" active={isActive("/gamification/social")} />
+</CollapseGroup>
 
         {isHR && (
           <>
