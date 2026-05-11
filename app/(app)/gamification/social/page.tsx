@@ -408,7 +408,7 @@ export default function SocialPage() {
       >
         <iframe
           ref={iframeRef}
-          src="/social-world-phaser.html"
+          src="/social-world-phaser.html?v=character07-final-2"
           className="h-full w-full border-0"
           title="BrainUp Social Area"
           onLoad={() => {
