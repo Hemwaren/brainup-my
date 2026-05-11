@@ -125,14 +125,16 @@ export default function SocialPage() {
   useEffect(() => {
     if (!iframeReady || !myProfile) return;
     postToWorld("INIT_ME", {
-      name: myProfile.display_name.split(" ")[0],
-      role: myProfile.role,
-      level: myProfile.level,
-      xp: myProfile.total_xp,
-      ei: myProfile.ei_score,
-      streak: myProfile.current_streak,
-      avatar: myProfile.avatar,
-    });
+  name: myProfile.display_name.split(" ")[0],
+  role: myProfile.role,
+  level: myProfile.level,
+  xp: myProfile.total_xp,
+  ei: myProfile.ei_score,
+  streak: myProfile.current_streak,
+  avatar: myProfile.avatar,
+  x: posRef.current.x,
+  y: posRef.current.y,
+});
   }, [iframeReady, myProfile, postToWorld]);
 
   // ── Realtime: presence + chat ──────────────────────────────────────────────
@@ -312,7 +314,7 @@ export default function SocialPage() {
       >
         <iframe
           ref={iframeRef}
-          src="/social-world.html"
+          src="/social-world-phaser.html"
           className="h-full w-full border-0"
           title="BrainUp Social Area"
           onLoad={() => {
