@@ -35,7 +35,11 @@ export async function GET(req: NextRequest) {
       .order("created_at", { ascending: false });
 
     if (!isHR) {
+      // Employee: only see their own
       query = query.eq("employee_id", user.id);
+    } else {
+      // HR: see unclaimed (hr_id is null) OR claimed by themselves
+      query = query.or(`hr_id.is.null,hr_id.eq.${user.id}`);
     }
 
     const { data, error } = await query;

@@ -9,6 +9,7 @@ async function getUserFromToken(req: NextRequest) {
   return user;
 }
 
+// ─── PATCH — HR updates status/note OR claims consultation ───────
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -40,9 +41,26 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    const { status, hr_note, requested_date, requested_time } = body;
+    const { status, hr_note, requested_date, requested_time, action } = body;
 
-    const update: Record<string, any> = { hr_id: user.id };
+    const update: Record<string, any> = { hr_id: user.id, hr_name: profile?.full_name || "HR" };
+
+    // Special action: claim only (no status change)
+    if (action === "claim") {
+      if (existing.hr_id && existing.hr_id !== user.id) {
+        return NextResponse.json({ error: "Already claimed by another HR" }, { status: 409 });
+      }
+      const { data: claimed, error: claimErr } = await supabaseAdmin
+        .from("consultations")
+        .update({ hr_id: user.id, hr_name: profile?.full_name || "HR" })
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (claimErr) return NextResponse.json({ error: claimErr.message }, { status: 500 });
+      return NextResponse.json({ ok: true, consultation: claimed, action: "claimed" });
+    }
+
     if (status !== undefined) update.status = status;
     if (hr_note !== undefined) update.hr_note = hr_note;
     if (requested_date !== undefined) update.requested_date = requested_date;
@@ -67,23 +85,21 @@ export async function PATCH(
     if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
 
     if (newlyConfirmed) {
-      const { data: empUser } = await supabaseAdmin.auth.admin.getUserById(
-        existing.employee_id
-      );
+      const { data: empUser } = await supabaseAdmin.auth.admin.getUserById(existing.employee_id);
       const employeeEmail = empUser?.user?.email;
       if (employeeEmail) {
-  try {
-    const resend = new (await import("resend")).Resend(process.env.RESEND_API_KEY);
-    await resend.emails.send({
-      from: "BrainUp <noreply@brainup.my>",
-      to: employeeEmail,
-      subject: `Consultation confirmed — ${updated.requested_date} at ${updated.requested_time}`,
-      html: `<p>Hi ${existing.employee_name}, your consultation on ${updated.requested_date} at ${updated.requested_time} has been confirmed by ${profile?.full_name || "HR Team"}.</p>`,
-    });
-  } catch (mailErr) {
-    console.error("Confirmation email failed:", mailErr);
-  }
-}
+        try {
+          const resend = new (await import("resend")).Resend(process.env.RESEND_API_KEY);
+          await resend.emails.send({
+            from: "BrainUp <noreply@brainup.my>",
+            to: employeeEmail,
+            subject: `Consultation confirmed — ${updated.requested_date} at ${updated.requested_time}`,
+            html: `<p>Hi ${existing.employee_name}, your consultation on ${updated.requested_date} at ${updated.requested_time} has been confirmed by <strong>${profile?.full_name || "HR Team"}</strong>.</p><p>This session is private and confidential.</p>`,
+          });
+        } catch (mailErr) {
+          console.error("Confirmation email failed:", mailErr);
+        }
+      }
     }
 
     return NextResponse.json({ ok: true, consultation: updated, emailed: newlyConfirmed });
@@ -92,6 +108,7 @@ export async function PATCH(
   }
 }
 
+// ─── DELETE — soft cancel ────────────────────────────────────────
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
