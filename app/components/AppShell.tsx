@@ -9,7 +9,7 @@ import {
   Bell, Brain, ChevronDown, LayoutDashboard, UserCircle2,
   Settings, BookOpen, ClipboardList, LibraryBig, NotebookPen,
   Trophy, LogOut, Search, BarChart3, Gift, Users, LayoutGrid,
-  Sparkles, X, FileText, Megaphone, HeartHandshake, ArrowRight,
+  Sparkles, X, FileText, Megaphone, HeartHandshake, ArrowRight, LifeBuoy,
 } from "lucide-react";
 
 type AppRole = "EMPLOYEE" | "HR" | "ADMIN" | string;
@@ -432,6 +432,13 @@ function AppShell({ children }: { children: React.ReactNode }) {
               <SubNavLink href="/hr/announcements" icon={<Bell size={14} />} label="Announcements" active={isActive("/hr/announcements")} />
               <SubNavLink href="/hr/support" icon={<HeartHandshake size={14} />} label="Support" active={isActive("/hr/support")} />
             </CollapseGroup>
+          </>
+        )}
+        {!isHR && (
+          <>
+            <SectionLabel label="Wellbeing" />
+            <NavLink href="/hr/consultations" icon={<HeartHandshake size={16} />} label="My Consultations" active={isActive("/hr/consultations")} />
+            <NavLink href="/hr/support" icon={<LifeBuoy size={16} />} label="Support" active={isActive("/hr/support")} />
           </>
         )}
       </nav>
