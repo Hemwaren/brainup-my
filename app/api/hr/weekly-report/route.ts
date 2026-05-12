@@ -136,7 +136,7 @@ async function getHrEmails() {
   const { data: profiles } = await supabaseAdmin
     .from("profiles")
     .select("id")
-    .in("role", ["HR", "ADMIN"]);
+    .in("role", ["HR"]);
 
   const emails: string[] = [];
   for (const p of profiles ?? []) {
