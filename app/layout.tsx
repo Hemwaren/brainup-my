@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   title: "BrainUp",
   description: "BrainUp – Emotional Intelligence Platform for SMEs",
   icons: {
-    icon: "/brainup-offlogo.png",
+    icon: "/favicon.ico",
   },
 };
 
@@ -27,6 +27,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
