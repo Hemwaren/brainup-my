@@ -73,7 +73,7 @@ function fmtDate(iso: string) {
   return d.toLocaleDateString("en-MY", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-async function authHeader() {
+async function authHeader(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
   return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
 }
