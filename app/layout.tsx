@@ -15,6 +15,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "BrainUp",
   description: "BrainUp – Emotional Intelligence Platform for SMEs",
+  icons: {
+    icon: "/brainup-offlogo.png",
+  },
 };
 
 export default function RootLayout({

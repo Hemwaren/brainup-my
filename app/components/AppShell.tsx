@@ -430,6 +430,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
               <SubNavLink href="/hr/dashboard" icon={<LayoutGrid size={14} />} label="Dashboard" active={isActive("/hr/dashboard")} />
               <SubNavLink href="/hr/consultations" icon={<Users size={14} />} label="Consultations" active={isActive("/hr/consultations")} />
               <SubNavLink href="/hr/announcements" icon={<Bell size={14} />} label="Announcements" active={isActive("/hr/announcements")} />
+              <SubNavLink href="/hr/support" icon={<HeartHandshake size={14} />} label="Support" active={isActive("/hr/support")} />
             </CollapseGroup>
           </>
         )}
