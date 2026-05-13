@@ -9,6 +9,7 @@ import {
   Tag, Calendar, Eye, Bookmark, CheckCircle2, XCircle, BarChart3,
   Zap, ChevronDown, FileText, Video, Sparkles, FileSpreadsheet,
   Link2, Circle, Archive, ChevronLeft, ChevronRight, CalendarRange,
+  Wand2, X, RefreshCw, Database, Brain,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -411,6 +412,7 @@ function EIResourcesTab() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [filterTopic, setFilterTopic] = useState("ALL");
+  const [aiOpen, setAiOpen] = useState(false);
   const needsLink = LINK_REQUIRED_TYPES.includes(form.type);
 
   const fetchResources = useCallback(async () => {
@@ -449,6 +451,11 @@ function EIResourcesTab() {
 
   return (
     <div className="space-y-4">
+      <AIGeneratorModal
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        onPublished={() => { fetchResources(); setMsg({ text: "✨ AI-generated resource published!", type: "success" }); }}
+      />
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex gap-2 flex-wrap">
           {[{ id: "ALL", label: "All" }, ...TOPICS].map((t) => (
@@ -458,10 +465,16 @@ function EIResourcesTab() {
             </button>
           ))}
         </div>
-        <button type="button" onClick={openCreate}
-          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 px-4 py-2 text-sm font-extrabold text-white shadow-sm hover:opacity-95 transition">
-          <Plus size={14} /> Add Resource
-        </button>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setAiOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-500 via-cyan-500 to-sky-500 px-4 py-2 text-sm font-extrabold text-white shadow-sm hover:opacity-95 transition">
+            <Wand2 size={14} /> Generate with AI
+          </button>
+          <button type="button" onClick={openCreate}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-extrabold text-slate-700 shadow-sm hover:bg-slate-50 transition">
+            <Plus size={14} /> Add Resource
+          </button>
+        </div>
       </div>
       {msg && !showForm && <div className={`rounded-xl border px-4 py-3 text-sm font-bold ${msg.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700"}`}>{msg.text}</div>}
       {showForm && (
@@ -805,6 +818,365 @@ function MissionRow({ mission: m, onToggle, onXPChange, saving }: { mission: Mis
         {saving ? <Loader2 size={11} className="animate-spin" /> : m.is_active ? <CheckCircle2 size={11} /> : <XCircle size={11} />}
         {m.is_active ? "Active" : "Inactive"}
       </button>
+    </div>
+  );
+}
+
+// ─── AI Content Generator Modal ──────────────────────────────────────
+function AIGeneratorModal({
+  open, onClose, onPublished,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onPublished: () => void;
+}) {
+  const [topic, setTopic] = useState("");
+  const [contentType, setContentType] = useState("article");
+  const [category, setCategory] = useState("productivity");
+  const [generating, setGenerating] = useState(false);
+  const [result, setResult] = useState<any>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [ragUsed, setRagUsed] = useState(false);
+  const [similarCount, setSimilarCount] = useState(0);
+
+  function reset() {
+    setTopic("");
+    setContentType("article");
+    setCategory("productivity");
+    setResult(null);
+    setErr(null);
+    setRagUsed(false);
+    setSimilarCount(0);
+  }
+
+  function handleClose() {
+    reset();
+    onClose();
+  }
+
+  async function handleGenerate() {
+    if (!topic.trim()) {
+      setErr("Please enter a topic.");
+      return;
+    }
+    setGenerating(true);
+    setErr(null);
+    setResult(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/generate-content", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ topic: topic.trim(), content_type: contentType, category }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Generation failed");
+      setResult(data.generated);
+      setRagUsed(data.rag_used);
+      setSimilarCount(data.similar_count);
+    } catch (e: any) {
+      setErr(e?.message ?? "Failed to generate.");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function handlePublish() {
+    if (!result) return;
+
+    // Validate URL requirement for ARTICLE/VIDEO
+    if (result.needs_url && !result.resource_url?.trim()) {
+      setErr(`A URL is required for ${result.type === "ARTICLE" ? "Article" : "Video"} type.`);
+      return;
+    }
+
+    setPublishing(true);
+    setErr(null);
+
+    const { error } = await supabase.from("ei_resources").insert({
+      title: result.title,
+      description: result.description,
+      content: result.content,
+      category: result.category,
+      pillar: "KNOW_YOURSELF",
+      type: result.type,
+      status: "PUBLISHED",
+      publish_date: new Date().toISOString().slice(0, 10),
+      resource_url: result.needs_url ? result.resource_url.trim() : null,
+    });
+
+    setPublishing(false);
+
+    if (error) {
+      setErr(`Failed to publish: ${error.message}`);
+      return;
+    }
+
+    reset();
+    onPublished();
+    onClose();
+  }
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-6 backdrop-blur-sm">
+      <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl max-h-[92vh] overflow-hidden flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-gradient-to-br from-violet-50 via-cyan-50 to-sky-50 px-6 py-4">
+          <div className="flex items-start gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-violet-400 via-cyan-400 to-sky-400 text-white shadow-sm">
+              <Wand2 size={17} />
+            </div>
+            <div>
+              <div className="text-base font-extrabold text-slate-900">AI Content Generator</div>
+              <div className="text-xs text-slate-600 mt-0.5">
+                Generate EI content with <span className="font-extrabold text-violet-600">Groq Llama 3.3</span> + <span className="font-extrabold text-cyan-600">RAG</span> over existing resources.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleClose}
+            className="grid h-8 w-8 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {!result ? (
+            /* ─── INPUT VIEW ─── */
+            <div className="space-y-4">
+              {/* Info banner */}
+              <div className="rounded-xl border border-cyan-100 bg-gradient-to-br from-cyan-50 to-sky-50 px-4 py-3">
+                <div className="flex items-start gap-2.5">
+                  <Brain size={15} className="text-cyan-600 mt-0.5 shrink-0" />
+                  <div className="text-xs text-cyan-800 leading-relaxed">
+                    <strong>How it works:</strong> The AI queries existing resources first (RAG) to avoid duplicates, then generates fresh content tailored to Malaysian SME workplaces.
+                  </div>
+                </div>
+              </div>
+
+              {/* Topic */}
+              <div>
+                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1.5">
+                  Topic <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  placeholder="e.g. Managing workplace stress, Building empathy in teams..."
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 transition"
+                />
+                <div className="mt-1.5 text-[10px] text-slate-400">
+                  Be specific — "Managing burnout in remote teams" works better than just "Burnout".
+                </div>
+              </div>
+
+              {/* Content Type + Category */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1.5">
+                    Content Type
+                  </label>
+                  <select
+                    value={contentType}
+                    onChange={(e) => setContentType(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+                  >
+                    <option value="article">📄 Article (400-500 words)</option>
+                    <option value="worksheet">📝 Worksheet (5-7 questions)</option>
+                    <option value="guide">📋 Step-by-Step Guide</option>
+                    <option value="exercise">🧘 Mindfulness Exercise</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1.5">
+                    Category
+                  </label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+                  >
+                    <option value="productivity">Productivity</option>
+                    <option value="confidence">Confidence</option>
+                    <option value="anger">Anger</option>
+                    <option value="anxiety">Anxiety</option>
+                    <option value="people">People-pleasing</option>
+                    <option value="relationships">Relationships</option>
+                    <option value="selflove">Self-love</option>
+                    <option value="parenting">Parenting</option>
+                  </select>
+                </div>
+              </div>
+
+              {err && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                  {err}
+                </div>
+              )}
+
+              {/* Generate button */}
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={generating}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-500 via-cyan-500 to-sky-500 px-5 py-3 text-sm font-extrabold text-white hover:opacity-95 disabled:opacity-50 shadow-sm transition"
+              >
+                {generating ? (
+                  <><Loader2 size={15} className="animate-spin" /> Generating with Groq + RAG...</>
+                ) : (
+                  <><Wand2 size={15} /> Generate Content</>
+                )}
+              </button>
+            </div>
+          ) : (
+            /* ─── RESULT VIEW ─── */
+            <div className="space-y-4">
+              {/* Success banner */}
+              <div className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-cyan-50 px-4 py-3">
+                <div className="flex items-start gap-2.5">
+                  <CheckCircle2 size={15} className="text-emerald-600 mt-0.5 shrink-0" />
+                  <div className="text-xs text-emerald-800 leading-relaxed flex-1">
+                    <strong>Content ready!</strong> Review and edit below, then publish to make it visible to employees.
+                  </div>
+                </div>
+              </div>
+
+              {/* RAG context badge */}
+              {ragUsed && (
+                <div className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[10px] font-extrabold text-violet-700">
+                  <Database size={10} />
+                  RAG referenced {similarCount} similar resource{similarCount !== 1 ? "s" : ""} to ensure uniqueness
+                </div>
+              )}
+
+              {/* Title */}
+              <div>
+                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1.5">Title</label>
+                <input
+                  type="text"
+                  value={result.title}
+                  onChange={(e) => setResult({ ...result, title: e.target.value })}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1.5">Description</label>
+                <textarea
+                  value={result.description}
+                  onChange={(e) => setResult({ ...result, description: e.target.value })}
+                  rows={2}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 resize-none"
+                />
+              </div>
+
+              {/* URL (for Article/Video) */}
+              {result.needs_url && (
+                <div>
+                  <label className="text-[10px] font-extrabold text-cyan-700 uppercase tracking-wider block mb-1.5 flex items-center gap-1.5">
+                    <Link2 size={11} />
+                    {result.type === "ARTICLE" ? "Article URL" : "Video URL"} <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={result.resource_url}
+                    onChange={(e) => setResult({ ...result, resource_url: e.target.value })}
+                    placeholder={result.type === "ARTICLE" ? "https://example.com/article" : "https://youtube.com/watch?v=..."}
+                    className="w-full rounded-xl border border-cyan-200 bg-cyan-50/30 px-4 py-2.5 text-sm font-medium outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+                  />
+                  <div className="mt-1 text-[10px] text-slate-400">AI suggested this — verify it's the right link before publishing.</div>
+                </div>
+              )}
+
+              {/* Content */}
+              <div>
+                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1.5">
+                  {result.type === "WORKSHEET" ? (
+                    <>Content <span className="font-normal text-violet-500">(this is the prompt Groq uses to generate the scenario game)</span></>
+                  ) : (
+                    <>Content</>
+                  )}
+                </label>
+                <textarea
+                  value={result.content}
+                  onChange={(e) => setResult({ ...result, content: e.target.value })}
+                  rows={11}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 resize-none font-mono leading-relaxed"
+                />
+              </div>
+
+              {/* Metadata + tags */}
+              <div className="rounded-xl bg-slate-50 border border-slate-100 px-4 py-3">
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <div className="font-extrabold text-slate-500 mb-0.5">Read Time</div>
+                    <div className="font-bold text-slate-700">{result.read_time_minutes} min</div>
+                  </div>
+                  <div>
+                    <div className="font-extrabold text-slate-500 mb-0.5">Type</div>
+                    <div className="font-bold text-slate-700">{result.type}</div>
+                  </div>
+                </div>
+                {result.tags && result.tags.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-slate-200">
+                    <div className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">Suggested Tags</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {result.tags.map((tag: string, i: number) => (
+                        <span key={i} className="rounded-full bg-cyan-50 border border-cyan-200 px-2 py-0.5 text-[10px] font-extrabold text-cyan-700">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {err && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                  {err}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        {result && (
+          <div className="border-t border-slate-100 bg-white px-6 py-4 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handlePublish}
+              disabled={publishing}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 px-5 py-2.5 text-sm font-extrabold text-white hover:opacity-95 disabled:opacity-50 shadow-sm"
+            >
+              {publishing ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+              {publishing ? "Publishing..." : "Publish to Resources"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setResult(null); setErr(null); }}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-extrabold text-slate-700 hover:bg-slate-50"
+            >
+              <RefreshCw size={13} />
+              Regenerate
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
