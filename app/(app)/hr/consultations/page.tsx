@@ -475,7 +475,7 @@ export default function ConsultationsPage() {
   if (loading) return <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><p className="text-sm text-slate-600">Loading consultations...</p></div>;
 
   return (
-    <div className="min-h-screen bg-[#f7fbff]">
+    <div className="min-h-screen">
       {toast && (
         <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm font-extrabold text-emerald-800 shadow-lg">
           <span className="inline-flex items-center gap-2"><CheckCircle2 size={16} />{toast}</span>

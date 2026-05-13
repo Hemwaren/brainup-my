@@ -86,6 +86,8 @@ export async function POST(req: NextRequest) {
         subject: subject.trim(),
         description: description.trim(),
         status: "OPEN",
+        attachment_url: body.attachment_url ?? null,
+        attachment_name: body.attachment_name ?? null,
       })
       .select()
       .single();

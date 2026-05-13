@@ -18,10 +18,13 @@ type CheckIn = {
   schedule_slot?: string | null;
 };
 
+// ─── Updated: now uses platform_settings windows ─────────
 type Schedule = {
   id: string;
   time_slot: string;
   is_active: boolean;
+  label?: string;
+  end_time?: string;
 };
 
 type Props = {
@@ -64,13 +67,23 @@ function formatWeekRange(start: Date) {
   return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, opts)}`;
 }
 
-function isWithinWindow(timeSlot: string): boolean {
+// ─── Updated: now uses range-based window check ───────────
+function isWithinWindow(startTime: string, endTime?: string): boolean {
   const now = new Date();
-  const [hours, minutes] = timeSlot.split(":").map(Number);
-  const slotDate = new Date();
-  slotDate.setHours(hours, minutes, 0, 0);
-  const diffMs = Math.abs(now.getTime() - slotDate.getTime());
-  return diffMs <= 60 * 60 * 1000;
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  const [sh, sm] = startTime.slice(0, 5).split(":").map(Number);
+  const startMin = sh * 60 + sm;
+
+  let endMin: number;
+  if (endTime) {
+    const [eh, em] = endTime.slice(0, 5).split(":").map(Number);
+    endMin = eh * 60 + em;
+  } else {
+    endMin = startMin + 90; // fallback 90 min window
+  }
+
+  return nowMin >= startMin && nowMin < endMin;
 }
 
 function CustomTooltip({ active, payload, label }: any) {
@@ -109,7 +122,7 @@ export default function EmotionCard({ userId, department }: Props) {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const [{ data: ciData }, { data: schData }, { data: todayData }] = await Promise.all([
+    const [{ data: ciData }, { data: settingsRow }, { data: todayData }] = await Promise.all([
       supabase
         .from("emotion_checkins")
         .select("id, emotion_level, emotion_tag, checked_in_at, schedule_slot")
@@ -117,11 +130,14 @@ export default function EmotionCard({ userId, department }: Props) {
         .gte("checked_in_at", weekStart.toISOString())
         .lt("checked_in_at", weekEnd.toISOString())
         .order("checked_in_at", { ascending: true }),
+
+      // ─── Read from platform_settings instead of checkin_schedules ───
       supabase
-        .from("checkin_schedules")
-        .select("id, time_slot, is_active")
-        .eq("is_active", true)
-        .order("time_slot", { ascending: true }),
+        .from("platform_settings")
+        .select("value")
+        .eq("key", "checkin_windows")
+        .single(),
+
       supabase
         .from("emotion_checkins")
         .select("id, emotion_level, emotion_tag, checked_in_at, schedule_slot")
@@ -130,15 +146,28 @@ export default function EmotionCard({ userId, department }: Props) {
         .lt("checked_in_at", tomorrow.toISOString()),
     ]);
 
+    // ─── Map platform_settings windows to Schedule format ────────────
+    type WindowRow = { id: string; label: string; start: string; end: string; is_active: boolean };
+    const rawWindows = (settingsRow?.value ?? []) as WindowRow[];
+    const mappedSchedules: Schedule[] = rawWindows
+      .filter(w => w.is_active)
+      .map(w => ({
+        id: w.id,
+        time_slot: w.start,
+        is_active: w.is_active,
+        label: w.label,
+        end_time: w.end,
+      }));
+
     setCheckins(ciData ?? []);
-    setSchedules(schData ?? []);
+    setSchedules(mappedSchedules);
     setTodayCheckins(todayData ?? []);
     setLoading(false);
   }, [userId, weekOffset]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Build chart data — avg emotion per day
+  // Build chart data
   const chartData = DAY_LABELS.map((day, i) => {
     const weekStart = getWeekStart(weekOffset);
     const dayDate = new Date(weekStart);
@@ -160,17 +189,18 @@ export default function EmotionCard({ userId, department }: Props) {
     return { day, avg, count: dayCheckins.length };
   });
 
-  // Check if a slot has been done today
-  function isSlotDone(timeSlot: string): boolean {
-    const slotHour = parseInt(timeSlot.split(":")[0]);
+  // ─── Updated: uses window range for done check ────────────
+  function isSlotDone(startTime: string, endTime?: string): boolean {
+    const [sh] = startTime.slice(0, 5).split(":").map(Number);
+    const [eh] = (endTime ?? `${sh + 2}:00`).slice(0, 5).split(":").map(Number);
     return todayCheckins.some(c => {
       const checkinHour = new Date(c.checked_in_at).getHours();
-      return Math.abs(checkinHour - slotHour) <= 1;
+      return checkinHour >= sh && checkinHour < eh;
     });
   }
 
   const availableSlots = schedules.filter(s =>
-    !isSlotDone(s.time_slot) && isWithinWindow(s.time_slot)
+    !isSlotDone(s.time_slot, s.end_time) && isWithinWindow(s.time_slot, s.end_time)
   );
 
   const canCheckinNow = availableSlots.length > 0;
@@ -206,7 +236,7 @@ export default function EmotionCard({ userId, department }: Props) {
             scheduleSlot={activeSlot}
             onComplete={() => {
               setShowModal(false);
-              fetchData(); // ✅ refresh chart after save
+              fetchData();
             }}
             onClose={() => setShowModal(false)}
           />
@@ -320,7 +350,7 @@ export default function EmotionCard({ userId, department }: Props) {
           )}
         </div>
 
-        {/* Today's slots */}
+        {/* Today's slots — updated to show label + range */}
         {schedules.length > 0 && (
           <div className="px-5 pb-4 border-t border-slate-100 pt-3">
             <div className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-2">
@@ -328,8 +358,8 @@ export default function EmotionCard({ userId, department }: Props) {
             </div>
             <div className="flex gap-2 flex-wrap">
               {schedules.map(s => {
-                const done = isSlotDone(s.time_slot);
-                const active = isWithinWindow(s.time_slot);
+                const done = isSlotDone(s.time_slot, s.end_time);
+                const active = isWithinWindow(s.time_slot, s.end_time);
                 return (
                   <div key={s.id}
                     className={[
@@ -344,7 +374,8 @@ export default function EmotionCard({ userId, department }: Props) {
                       "h-1.5 w-1.5 rounded-full",
                       done ? "bg-emerald-500" : active ? "bg-cyan-500 animate-pulse" : "bg-slate-300",
                     ].join(" ")} />
-                    {s.time_slot.slice(0, 5)}
+                    {/* Show label + range e.g. "Morning · 09:00-10:30" */}
+                    {s.time_slot.slice(0, 5)}{s.end_time ? ` – ${s.end_time.slice(0, 5)}` : ""}
                     {done && " ✓"}
                   </div>
                 );

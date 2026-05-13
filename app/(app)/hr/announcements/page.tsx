@@ -1,17 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import {
-  Plus,
-  Pencil,
-  Trash2,
-  Loader2,
-  Megaphone,
-  Calendar,
-  Tag,
+  Plus, Pencil, Trash2, Loader2, Megaphone, Calendar, Tag, ChevronDown, Check,
 } from "lucide-react";
+
+// ─── Types ────────────────────────────────────────────────────────
 
 type Announcement = {
   id: string;
@@ -27,25 +23,27 @@ type Announcement = {
 const CATEGORIES = ["WELLNESS", "EVENT", "REMINDER", "GENERAL"] as const;
 const STATUSES = ["PUBLISHED", "UPCOMING", "ARCHIVED"] as const;
 
-const CATEGORY_STYLES: Record<string, string> = {
-  WELLNESS: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  EVENT: "bg-sky-50 text-sky-700 border-sky-200",
-  REMINDER: "bg-amber-50 text-amber-700 border-amber-200",
-  GENERAL: "bg-slate-50 text-slate-700 border-slate-200",
+const CATEGORY_META: Record<string, { color: string; dot: string }> = {
+  WELLNESS: { color: "bg-cyan-50 text-cyan-700 border-cyan-200", dot: "bg-cyan-500" },
+  EVENT:    { color: "bg-sky-50 text-sky-700 border-sky-200",   dot: "bg-sky-400" },
+  REMINDER: { color: "bg-teal-50 text-teal-700 border-teal-200", dot: "bg-teal-500" },
+  GENERAL:  { color: "bg-slate-50 text-slate-600 border-slate-200", dot: "bg-slate-400" },
 };
 
-const STATUS_STYLES: Record<string, string> = {
-  PUBLISHED: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  UPCOMING: "bg-sky-50 text-sky-700 border-sky-200",
-  ARCHIVED: "bg-slate-50 text-slate-500 border-slate-200",
+const STATUS_META: Record<string, { color: string; dot: string }> = {
+  PUBLISHED: { color: "bg-cyan-50 text-cyan-700 border-cyan-200",   dot: "bg-cyan-500" },
+  UPCOMING:  { color: "bg-sky-50 text-sky-700 border-sky-200",      dot: "bg-sky-400" },
+  ARCHIVED:  { color: "bg-slate-50 text-slate-500 border-slate-200", dot: "bg-slate-400" },
 };
 
 function fmtDate(d: string) {
-  return new Date(d).toLocaleDateString(undefined, {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-  });
+  return new Date(d).toLocaleDateString(undefined, { month: "short", day: "2-digit", year: "numeric" });
+}
+
+function fmtDateDisplay(iso: string) {
+  if (!iso) return "Select date";
+  const d = new Date(iso + "T00:00:00Z");
+  return d.toLocaleDateString("en-MY", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 const EMPTY_FORM = {
@@ -55,6 +53,114 @@ const EMPTY_FORM = {
   publish_date: new Date().toISOString().slice(0, 10),
   status: "PUBLISHED" as Announcement["status"],
 };
+
+// ─── Custom Dropdown ──────────────────────────────────────────────
+
+function StyledDropdown<T extends string>({
+  value, onChange, options, label,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: readonly T[];
+  label: (v: T) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className={`w-full inline-flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-sm font-bold transition ${
+          open
+            ? "border-cyan-400 bg-white shadow-[0_0_0_3px_rgba(6,182,212,0.15)]"
+            : "border-slate-200 bg-white hover:border-cyan-300 hover:bg-cyan-50/30"
+        } text-slate-800`}
+      >
+        <span className="flex items-center gap-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-cyan-500 flex-shrink-0" />
+          {label(value)}
+        </span>
+        <ChevronDown
+          size={14}
+          className={`text-slate-400 transition-transform duration-200 flex-shrink-0 ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 right-0 mt-1.5 z-50 rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60 overflow-hidden">
+          <div className="p-1">
+            {options.map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => { onChange(opt); setOpen(false); }}
+                className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-bold transition ${
+                  value === opt
+                    ? "bg-cyan-500 text-white"
+                    : "text-slate-700 hover:bg-cyan-50 hover:text-cyan-700"
+                }`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${value === opt ? "bg-white" : "bg-cyan-400"}`} />
+                {label(opt)}
+                {value === opt && <Check size={12} className="ml-auto" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Styled Date Input ────────────────────────────────────────────
+
+function StyledDateInput({
+  value, onChange, label,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  label?: string;
+}) {
+  const [focused, setFocused] = useState(false);
+
+  return (
+    <div className="space-y-1">
+      {label && (
+        <div className="text-xs font-bold text-slate-500">{label}</div>
+      )}
+      <div className={`relative inline-flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 transition ${
+        focused
+          ? "border-cyan-400 bg-white shadow-[0_0_0_3px_rgba(6,182,212,0.15)]"
+          : "border-slate-200 bg-white hover:border-cyan-300"
+      }`}>
+        <Calendar size={14} className="text-cyan-500 flex-shrink-0" />
+        <span className="text-sm font-bold text-slate-700 flex-1 select-none pointer-events-none">
+          {fmtDateDisplay(value)}
+        </span>
+        <input
+          type="date"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          className="absolute inset-0 w-full opacity-0 cursor-pointer"
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────
 
 export default function AnnouncementsPage() {
   const router = useRouter();
@@ -74,11 +180,7 @@ export default function AnnouncementsPage() {
       .from("hr_announcements")
       .select("*")
       .order("publish_date", { ascending: false });
-
-    if (error) {
-      console.error("Fetch error:", error.message);
-      return;
-    }
+    if (error) { console.error("Fetch error:", error.message); return; }
     setAnnouncements(data ?? []);
   }, []);
 
@@ -88,32 +190,23 @@ export default function AnnouncementsPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push("/auth"); return; }
 
-      const md: any = session.user.user_metadata || {};
-      const role = (md?.role ?? "EMPLOYEE") as string;
-      if (String(role).toUpperCase() !== "HR" && String(role).toUpperCase() !== "ADMIN") {
-        router.push("/post-login");
-        return;
-      }
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", session.user.id)
+        .single();
+
+      const role = String(profile?.role || "EMPLOYEE").toUpperCase();
+      if (role !== "HR" && role !== "ADMIN") { router.push("/post-login"); return; }
 
       setCurrentUserId(session.user.id);
-
-      const { data, error } = await supabase
-        .from("hr_announcements")
-        .select("*")
-        .order("publish_date", { ascending: false });
-
+      await fetchAnnouncements();
       if (!alive) return;
-
-      if (error) {
-        console.error("Load error:", error.message);
-      }
-
-      setAnnouncements(data ?? []);
       setLoading(false);
     }
     load();
     return () => { alive = false; };
-  }, [router]);
+  }, [router, fetchAnnouncements]);
 
   function openCreate() {
     setEditingId(null);
@@ -147,7 +240,6 @@ export default function AnnouncementsPage() {
       setMsg({ text: "Please fill in title, content and publish date.", type: "error" });
       return;
     }
-
     if (!currentUserId) {
       setMsg({ text: "Session expired. Please log in again.", type: "error" });
       return;
@@ -170,7 +262,6 @@ export default function AnnouncementsPage() {
         .eq("id", editingId);
 
       if (error) {
-        console.error("Update error:", error.message);
         setMsg({ text: `Failed to update: ${error.message}`, type: "error" });
         setSaving(false);
         return;
@@ -188,14 +279,12 @@ export default function AnnouncementsPage() {
         });
 
       if (error) {
-        console.error("Insert error:", error.message);
         setMsg({ text: `Failed to create: ${error.message}`, type: "error" });
         setSaving(false);
         return;
       }
     }
 
-    // Refetch from Supabase to confirm save
     await fetchAnnouncements();
     setShowForm(false);
     setEditingId(null);
@@ -209,26 +298,15 @@ export default function AnnouncementsPage() {
 
   async function handleDelete(id: string) {
     setDeletingId(id);
-
-    const { error } = await supabase
-      .from("hr_announcements")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      console.error("Delete error:", error.message);
-      setDeletingId(null);
-      return;
-    }
-
-    // Refetch from Supabase to confirm deletion
+    const { error } = await supabase.from("hr_announcements").delete().eq("id", id);
+    if (error) { console.error("Delete error:", error.message); setDeletingId(null); return; }
     await fetchAnnouncements();
     setDeletingId(null);
   }
 
   const published = announcements.filter((a) => a.status === "PUBLISHED");
-  const upcoming = announcements.filter((a) => a.status === "UPCOMING");
-  const archived = announcements.filter((a) => a.status === "ARCHIVED");
+  const upcoming  = announcements.filter((a) => a.status === "UPCOMING");
+  const archived  = announcements.filter((a) => a.status === "ARCHIVED");
 
   if (loading) {
     return (
@@ -240,6 +318,7 @@ export default function AnnouncementsPage() {
 
   return (
     <div>
+      {/* Header */}
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-extrabold text-slate-900">HR Announcements</h1>
@@ -252,17 +331,16 @@ export default function AnnouncementsPage() {
           onClick={openCreate}
           className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-extrabold text-white hover:opacity-95"
         >
-          <Plus size={16} />
-          New Announcement
+          <Plus size={16} />New Announcement
         </button>
       </div>
 
-      {/* Message outside form */}
+      {/* Toast message outside form */}
       {msg && !showForm && (
         <div className={[
           "mb-4 rounded-2xl border px-4 py-3 text-sm font-bold",
           msg.type === "success"
-            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+            ? "border-cyan-200 bg-cyan-50 text-cyan-700"
             : "border-rose-200 bg-rose-50 text-rose-700",
         ].join(" ")}>
           {msg.text}
@@ -272,98 +350,101 @@ export default function AnnouncementsPage() {
       {/* Form */}
       {showForm && (
         <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 text-sm font-extrabold text-slate-900">
-            {editingId ? "Edit Announcement" : "Create New Announcement"}
+          {/* Form header */}
+          <div className="flex items-center gap-2 mb-5">
+            <div className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white shadow-sm">
+              <Megaphone size={14} />
+            </div>
+            <div className="text-sm font-extrabold text-slate-900">
+              {editingId ? "Edit Announcement" : "Create New Announcement"}
+            </div>
           </div>
 
           <div className="space-y-4">
+            {/* Title */}
             <div>
-              <label className="text-xs font-bold text-slate-500 block mb-1">
-                Title <span className="text-rose-500">*</span>
+              <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider block mb-1.5">
+                Title <span className="text-rose-400 normal-case tracking-normal">*</span>
               </label>
               <input
                 type="text"
                 value={form.title}
                 onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
                 placeholder="Announcement title..."
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300"
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 transition placeholder:text-slate-400"
               />
             </div>
 
+            {/* Content */}
             <div>
-              <label className="text-xs font-bold text-slate-500 block mb-1">
-                Content <span className="text-rose-500">*</span>
+              <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider block mb-1.5">
+                Content <span className="text-rose-400 normal-case tracking-normal">*</span>
               </label>
               <textarea
                 value={form.content}
                 onChange={(e) => setForm((p) => ({ ...p, content: e.target.value }))}
                 placeholder="Write your announcement here..."
                 rows={4}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300 resize-none"
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 transition resize-none placeholder:text-slate-400"
               />
             </div>
 
+            {/* Row — Category, Status, Date */}
             <div className="grid gap-4 md:grid-cols-3">
               <div>
-                <label className="text-xs font-bold text-slate-500 block mb-1">Category</label>
-                <select
-                  value={form.category}
-                  onChange={(e) => setForm((p) => ({ ...p, category: e.target.value as Announcement["category"] }))}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300"
-                >
-                  {CATEGORIES.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-500 block mb-1">
-                  Publish Date <span className="text-rose-500">*</span>
+                <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider block mb-1.5">
+                  Category
                 </label>
-                <input
-                  type="date"
-                  value={form.publish_date}
-                  onChange={(e) => setForm((p) => ({ ...p, publish_date: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300"
+                <StyledDropdown
+                  value={form.category}
+                  onChange={(v) => setForm((p) => ({ ...p, category: v }))}
+                  options={CATEGORIES}
+                  label={(v) => v.charAt(0) + v.slice(1).toLowerCase()}
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-500 block mb-1">Status</label>
-                <select
+                <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider block mb-1.5">
+                  Status
+                </label>
+                <StyledDropdown
                   value={form.status}
-                  onChange={(e) => setForm((p) => ({ ...p, status: e.target.value as Announcement["status"] }))}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300"
-                >
-                  {STATUSES.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
+                  onChange={(v) => setForm((p) => ({ ...p, status: v }))}
+                  options={STATUSES}
+                  label={(v) => v.charAt(0) + v.slice(1).toLowerCase()}
+                />
               </div>
+
+              <StyledDateInput
+                value={form.publish_date}
+                onChange={(v) => setForm((p) => ({ ...p, publish_date: v }))}
+                label="PUBLISH DATE *"
+              />
             </div>
           </div>
 
+          {/* Form error message */}
           {msg && (
-            <p className={`mt-3 text-sm font-semibold ${msg.type === "error" ? "text-rose-600" : "text-emerald-600"}`}>
+            <p className={`mt-3 text-sm font-semibold ${msg.type === "error" ? "text-rose-600" : "text-cyan-700"}`}>
               {msg.text}
             </p>
           )}
 
-          <div className="mt-4 flex items-center gap-3">
+          {/* Form actions */}
+          <div className="mt-5 flex items-center gap-3 border-t border-slate-100 pt-4">
             <button
               type="button"
               onClick={handleSubmit}
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-extrabold text-white hover:opacity-95 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 px-5 py-2.5 text-sm font-extrabold text-white hover:opacity-95 disabled:opacity-50 shadow-sm"
             >
               {saving && <Loader2 size={15} className="animate-spin" />}
-              {saving ? "Saving..." : editingId ? "Update" : "Publish"}
+              {saving ? "Saving..." : editingId ? "Update Announcement" : "Publish Announcement"}
             </button>
             <button
               type="button"
               onClick={cancelForm}
-              className="rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-extrabold text-slate-800 hover:bg-slate-50"
+              className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-extrabold text-slate-700 hover:bg-slate-50 transition"
             >
               Cancel
             </button>
@@ -371,32 +452,10 @@ export default function AnnouncementsPage() {
         </section>
       )}
 
-      {/* Published */}
-      <AnnouncementGroup
-        title="Published"
-        items={published}
-        onEdit={openEdit}
-        onDelete={handleDelete}
-        deletingId={deletingId}
-      />
-
-      {/* Upcoming */}
-      <AnnouncementGroup
-        title="Upcoming"
-        items={upcoming}
-        onEdit={openEdit}
-        onDelete={handleDelete}
-        deletingId={deletingId}
-      />
-
-      {/* Archived */}
-      <AnnouncementGroup
-        title="Archived"
-        items={archived}
-        onEdit={openEdit}
-        onDelete={handleDelete}
-        deletingId={deletingId}
-      />
+      {/* Announcement groups */}
+      <AnnouncementGroup title="Published" items={published} onEdit={openEdit} onDelete={handleDelete} deletingId={deletingId} />
+      <AnnouncementGroup title="Upcoming" items={upcoming} onEdit={openEdit} onDelete={handleDelete} deletingId={deletingId} />
+      <AnnouncementGroup title="Archived" items={archived} onEdit={openEdit} onDelete={handleDelete} deletingId={deletingId} />
 
       {announcements.length === 0 && (
         <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
@@ -404,21 +463,17 @@ export default function AnnouncementsPage() {
             <Megaphone size={20} className="text-slate-400" />
           </div>
           <div className="mt-4 text-base font-extrabold text-slate-900">No announcements yet</div>
-          <div className="mt-1 text-sm text-slate-500">
-            Click New Announcement to create your first one.
-          </div>
+          <div className="mt-1 text-sm text-slate-500">Click New Announcement to create your first one.</div>
         </div>
       )}
     </div>
   );
 }
 
+// ─── Announcement Group ───────────────────────────────────────────
+
 function AnnouncementGroup({
-  title,
-  items,
-  onEdit,
-  onDelete,
-  deletingId,
+  title, items, onEdit, onDelete, deletingId,
 }: {
   title: string;
   items: Announcement[];
@@ -428,60 +483,83 @@ function AnnouncementGroup({
 }) {
   if (items.length === 0) return null;
 
+  const groupAccent: Record<string, string> = {
+    Published: "from-cyan-400 to-sky-500",
+    Upcoming: "from-teal-400 to-cyan-500",
+    Archived: "from-slate-300 to-slate-400",
+  };
+
   return (
     <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-3 text-sm font-extrabold text-slate-900">
-        {title} ({items.length})
+      <div className="mb-4 flex items-center gap-2">
+        <div className={`h-1 w-4 rounded-full bg-gradient-to-r ${groupAccent[title] ?? "from-cyan-400 to-sky-400"}`} />
+        <div className="text-sm font-extrabold text-slate-900">{title}</div>
+        <span className="rounded-full bg-cyan-50 border border-cyan-200 px-2 py-0.5 text-[10px] font-extrabold text-cyan-700">
+          {items.length}
+        </span>
       </div>
-      <div className="space-y-3">
-        {items.map((a) => (
-          <div key={a.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-2 mb-1">
-                  <div className="text-sm font-extrabold text-slate-900">{a.title}</div>
-                  <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-extrabold ${CATEGORY_STYLES[a.category]}`}>
-                    <Tag size={10} className="mr-1" />
-                    {a.category}
-                  </span>
-                  <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-extrabold ${STATUS_STYLES[a.status]}`}>
-                    {a.status}
-                  </span>
+
+      <div className="space-y-2.5">
+        {items.map((a) => {
+          const cat = CATEGORY_META[a.category];
+          const stat = STATUS_META[a.status];
+          return (
+            <div
+              key={a.id}
+              className="group rounded-xl border border-slate-100 bg-slate-50 hover:bg-white hover:border-cyan-100 hover:shadow-sm p-4 transition"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  {/* Title + badges */}
+                  <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                    <div className="text-sm font-extrabold text-slate-900">{a.title}</div>
+                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-extrabold ${cat.color}`}>
+                      <span className={`h-1 w-1 rounded-full ${cat.dot}`} />
+                      {a.category}
+                    </span>
+                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-extrabold ${stat.color}`}>
+                      <span className={`h-1 w-1 rounded-full ${stat.dot}`} />
+                      {a.status}
+                    </span>
+                  </div>
+
+                  {/* Content preview */}
+                  <p className="text-sm text-slate-600 line-clamp-2 leading-relaxed">{a.content}</p>
+
+                  {/* Date */}
+                  <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white border border-slate-200 px-2.5 py-1 text-[10px] font-extrabold text-slate-500">
+                    <Calendar size={10} className="text-cyan-500" />
+                    {fmtDate(a.publish_date)}
+                  </div>
                 </div>
 
-                <p className="text-sm text-slate-600 mt-1 line-clamp-2">{a.content}</p>
-
-                <div className="mt-2 flex items-center gap-1 text-xs text-slate-500">
-                  <Calendar size={11} />
-                  {fmtDate(a.publish_date)}
+                {/* Actions */}
+                <div className="flex gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition">
+                  <button
+                    type="button"
+                    onClick={() => onEdit(a)}
+                    className="grid h-8 w-8 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700 transition"
+                    aria-label="Edit"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDelete(a.id)}
+                    disabled={deletingId === a.id}
+                    className="grid h-8 w-8 place-items-center rounded-xl border border-slate-200 bg-white text-slate-400 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-500 transition disabled:opacity-50"
+                    aria-label="Delete"
+                  >
+                    {deletingId === a.id
+                      ? <Loader2 size={13} className="animate-spin" />
+                      : <Trash2 size={13} />
+                    }
+                  </button>
                 </div>
-              </div>
-
-              <div className="flex gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => onEdit(a)}
-                  className="grid h-8 w-8 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                  aria-label="Edit"
-                >
-                  <Pencil size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDelete(a.id)}
-                  disabled={deletingId === a.id}
-                  className="grid h-8 w-8 place-items-center rounded-xl border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 disabled:opacity-50"
-                  aria-label="Delete"
-                >
-                  {deletingId === a.id
-                    ? <Loader2 size={14} className="animate-spin" />
-                    : <Trash2 size={14} />
-                  }
-                </button>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

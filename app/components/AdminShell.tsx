@@ -18,7 +18,7 @@ import {
   BookOpen,
   Trophy,
   NotebookPen,
-  Shield,
+  Shield, LifeBuoy,
 } from "lucide-react";
 
 type Profile = {
@@ -136,8 +136,9 @@ function AdminShell({ children }: { children: React.ReactNode }) {
         </CollapseGroup>
 
         <SectionLabel label="System" />
-        <NavLink href="/admin/settings" icon={<Settings size={16} />} label="System Settings" active={isActive("/admin/settings")} />
-        <NavLink href="/admin/support" icon={<HeartHandshake size={16} />} label="Support Directory" active={isActive("/admin/support")} />
+<NavLink href="/admin/settings" icon={<Settings size={16} />} label="System Settings" active={isActive("/admin/settings")} />
+<NavLink href="/admin/support" icon={<HeartHandshake size={16} />} label="Support Directory" active={isActive("/admin/support")} />
+<NavLink href="/admin/tickets" icon={<LifeBuoy size={16} />} label="Support Tickets" active={isActive("/admin/tickets")} />
       </nav>
 
       <div className="mx-3 mb-3 rounded-2xl border border-cyan-100 bg-cyan-50 p-3">
