@@ -1,16 +1,5 @@
 "use client";
 
-/**
- * app/(app)/gamification/stats/page.tsx — FIXED
- *
- * Root cause of crash: `import { BADGE_DEFINITIONS } from "@/lib/badges"`
- * lib/badges.ts imports supabaseAdmin at the top level, which throws
- * "Missing env: SUPABASE_SERVICE_ROLE_KEY" when bundled into the browser.
- *
- * Fix: badge definitions moved to lib/badgeDefinitions.ts (zero server deps).
- * lib/badges.ts remains for server-only award logic — never import it client-side.
- */
-
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
@@ -23,6 +12,7 @@ import {
   ClipboardList, Star, Zap, TrendingUp, Users, Lock, Award,
   Calendar, ShieldCheck, PenLine, Shield, BookOpen, Target,
   Library, Brain, Leaf, Mountain, Crown, Footprints, Telescope,
+  Loader2, ChevronRight,
 } from "lucide-react";
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
@@ -43,6 +33,8 @@ type MissionRow = {
   activity_key: string;
   xp_reward: number;
   is_active: boolean;
+  verification_type?: string;
+  requires_reflection?: boolean;
 };
 
 type LeaderboardEntry = {
@@ -255,6 +247,17 @@ export default function StatsPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const burstIdRef = useRef(0);
+  const [personalisedMissions, setPersonalisedMissions] = useState<MissionRow[]>([]);
+  const [personalisedReasoning, setPersonalisedReasoning] = useState<string | null>(null);
+  const [personalisedLoading, setPersonalisedLoading] = useState(true);
+  const [realworldModalMission, setRealworldModalMission] = useState<MissionRow | null>(null);
+  const [missionUpdates, setMissionUpdates] = useState<Array<{
+    id: string;
+    mission_title: string;
+    status: "approved" | "rejected" | "pending";
+    xp_awarded?: number;
+  }>>([]);
+  const [expandedUpdate, setExpandedUpdate] = useState<string | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -286,9 +289,9 @@ export default function StatsPage() {
         supabase.from("user_gamification").select("*").eq("user_id", uid).maybeSingle(),
         supabase.from("user_badges").select("badge_key").eq("user_id", uid),
         supabase.from("user_mission_completions")
-          .select("mission_id, completed_at").eq("user_id", uid).gte("completed_at", today),
+          .select("mission_id, completed_at, status").eq("user_id", uid).gte("completed_at", today),
         supabase.from("daily_missions")
-          .select("id, title, description, activity_key, xp_reward, is_active")
+          .select("id, title, description, activity_key, xp_reward, is_active, verification_type, requires_reflection")
           .eq("is_active", true).order("xp_reward", { ascending: true }),
         supabase.from("xp_transactions")
           .select("activity_key, xp_awarded, created_at").eq("user_id", uid)
@@ -305,9 +308,15 @@ export default function StatsPage() {
       setUnlockedBadges(badgeSet);
       setPrevBadges(new Set(badgeSet));
 
+      // Only mark as completed if approved or platform (no status = old platform mission)
       setCompletedToday(new Set(
         (missionCompletions ?? [])
-          .filter((m: any) => m.completed_at?.startsWith(today))
+          .filter((m: any) => {
+            if (!m.completed_at?.startsWith(today)) return false;
+            // pending real-world should NOT show as done yet
+            if (m.status === "pending") return false;
+            return true;
+          })
           .map((m: any) => m.mission_id as string)
       ));
 
@@ -327,6 +336,31 @@ export default function StatsPage() {
       }
       setWeeklyXP(sevenDays);
       setLoading(false);
+
+      // Fetch personalised missions
+      try {
+        const res = await fetch("/api/gamification/personalised-missions", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        const data = await res.json();
+        if (data.ok) {
+          setPersonalisedMissions(data.missions ?? []);
+          setPersonalisedReasoning(data.reasoning ?? null);
+        }
+      } catch {}
+      setPersonalisedLoading(false);
+
+      // Check mission approval status
+      try {
+        const res = await fetch("/api/gamification/check-mission-status", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        const data = await res.json();
+        if (data.ok && data.missions?.length > 0) {
+          setMissionUpdates(data.missions.filter((m: any) => m.status !== "pending"));
+        }
+      } catch {}
+
       loadLeaderboard(uid);
     }
     load();
@@ -345,6 +379,38 @@ export default function StatsPage() {
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [userId]);
+
+  // Realtime listener for mission approval status
+  useEffect(() => {
+    if (!userId) return;
+    const ch = supabase.channel(`mission-updates:${userId}`)
+      .on("postgres_changes",
+        { event: "UPDATE", schema: "public", table: "user_mission_completions", filter: `user_id=eq.${userId}` },
+        async (p) => {
+          const update = (p.new as any);
+          if (update.status !== "pending") {
+            setMissionUpdates(prev => {
+              const existing = prev.findIndex(m => m.id === update.id);
+              if (existing >= 0) {
+                const newUpdates = [...prev];
+                newUpdates[existing] = {
+                  id: update.id,
+                  mission_title: newUpdates[existing].mission_title,
+                  status: update.status,
+                  xp_awarded: update.xp_awarded,
+                };
+                return newUpdates;
+              }
+              return prev;
+            });
+            showToast(update.status === "approved"
+              ? `✅ Mission approved! +${update.xp_awarded} XP`
+              : "❌ Mission rejected. Try again!");
+          }
+        })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [userId, showToast]);
 
   useEffect(() => {
     unlockedBadges.forEach(key => {
@@ -422,6 +488,18 @@ export default function StatsPage() {
   return (
     <>
       <XPBurstLayer bursts={xpBursts} onDone={id => setXpBursts(prev => prev.filter(b => b.id !== id))} />
+      <AnimatePresence>
+        {realworldModalMission && (
+          <RealWorldMissionModal
+            mission={realworldModalMission}
+            onClose={() => setRealworldModalMission(null)}
+            onSubmitted={() => {
+              setRealworldModalMission(null);
+              showToast("Submitted! Waiting for admin approval.");
+            }}
+          />
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {badgeUnlock && <BadgeUnlockModal badge={badgeUnlock} onClose={() => setBadgeUnlock(null)} />}
       </AnimatePresence>
@@ -512,11 +590,106 @@ export default function StatsPage() {
           {capPct >= 100 && <p className="mt-2 text-xs font-bold text-amber-600">Daily cap reached. Come back tomorrow for more XP.</p>}
         </section>
 
-        {/* Daily Missions */}
+        {/* Mission Status Updates */}
+        <AnimatePresence>
+          {missionUpdates.length > 0 && (
+            <motion.section
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <CheckCircle2 size={15} className="text-amber-500" />
+                <span className="text-sm font-extrabold text-slate-900">Real-World Mission Status</span>
+                <span className="ml-auto text-xs font-bold text-slate-400">{missionUpdates.length} update{missionUpdates.length > 1 ? "s" : ""}</span>
+              </div>
+              <div className="space-y-2">
+                {missionUpdates.map(update => (
+                  <motion.div key={update.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className={`rounded-xl border px-4 py-3 cursor-pointer transition ${
+                      update.status === "approved"
+                        ? "border-emerald-200 bg-emerald-50 hover:bg-emerald-100"
+                        : "border-rose-200 bg-rose-50 hover:bg-rose-100"
+                    }`}
+                    onClick={() => setExpandedUpdate(expandedUpdate === update.id ? null : update.id)}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-extrabold text-slate-900 flex items-center gap-2 flex-wrap">
+                          {update.status === "approved" ? "✅ Approved" : "❌ Rejected"}
+                          <span className="text-xs font-bold text-slate-500">{update.mission_title}</span>
+                        </div>
+                        {update.status === "approved" && update.xp_awarded && (
+                          <div className="text-xs text-emerald-700 mt-1 font-bold">+{update.xp_awarded} XP awarded!</div>
+                        )}
+                        {update.status === "rejected" && (
+                          <div className="text-xs text-rose-700 mt-1">Try submitting a more detailed reflection next time.</div>
+                        )}
+                      </div>
+                      <ChevronRight size={16} className={`shrink-0 text-slate-400 transition-transform ${expandedUpdate === update.id ? "rotate-90" : ""}`} />
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </motion.section>
+          )}
+        </AnimatePresence>
+
+        {/* Personalised Missions */}
+        {personalisedMissions.length > 0 && (
+          <section className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50/40 to-cyan-50/40 p-5 shadow-sm">
+            <div className="mb-2 flex items-center gap-2">
+              <Sparkles size={15} className="text-violet-500" />
+              <span className="text-sm font-extrabold text-slate-900">Personalised for You</span>
+              <span className="ml-auto text-xs font-bold text-violet-600">AI-recommended</span>
+            </div>
+            {personalisedReasoning && (
+              <div className="mb-3 rounded-lg bg-white/60 border border-violet-100 px-3 py-2 text-xs text-slate-700 leading-relaxed">
+                💡 {personalisedReasoning}
+              </div>
+            )}
+            <div className="space-y-2">
+              {personalisedMissions.map(m => {
+                const done = completedToday.has(m.id);
+                const busy = completing === m.id;
+                const isRealworld = m.verification_type === "realworld";
+                return (
+                  <motion.button key={m.id} type="button"
+                    disabled={done || !!completing}
+                    onClick={() => isRealworld ? setRealworldModalMission(m) : completeMission(m.id, m.activity_key)}
+                    whileTap={!done ? { scale: 0.985 } : {}}
+                    className={[
+                      "flex w-full items-center gap-3 rounded-2xl border p-3.5 text-left transition",
+                      done ? "border-teal-100 bg-teal-50" : "border-violet-200 bg-white hover:border-violet-300 shadow-sm",
+                    ].join(" ")}>
+                    <span className={done ? "text-teal-500" : "text-violet-400"}>
+                      {done ? <CheckCircle2 size={20} /> : isRealworld ? <Sparkles size={20} /> : <Circle size={20} />}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className={`text-sm font-extrabold ${done ? "line-through text-slate-400" : "text-slate-900"}`}>{m.title}</div>
+                        {isRealworld && (
+                          <span className="rounded-full bg-violet-100 text-violet-700 px-1.5 py-0.5 text-[9px] font-extrabold">🌍 Real-world</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-500">{m.description}</div>
+                    </div>
+                    <span className={`text-xs font-extrabold shrink-0 ${done ? "text-teal-500" : "text-violet-600"}`}>
+                      {busy ? "..." : done ? "Done" : `+${m.xp_reward} XP`}
+                    </span>
+                  </motion.button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* All Missions */}
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center gap-2">
             <ClipboardList size={15} className="text-cyan-500" />
-            <span className="text-sm font-extrabold text-slate-900">Today&apos;s Missions</span>
+            <span className="text-sm font-extrabold text-slate-900">All Available Missions</span>
             <span className="ml-auto text-xs font-bold text-slate-400">{completedToday.size}/{missions.length} done</span>
           </div>
           {missions.length === 0 ? (
@@ -526,22 +699,28 @@ export default function StatsPage() {
               {missions.map(m => {
                 const done = completedToday.has(m.id);
                 const busy = completing === m.id;
+                const isRealworld = m.verification_type === "realworld";
                 return (
                   <motion.button key={m.id} type="button"
-                    disabled={done || !!completing || remainingXP <= 0}
-                    onClick={() => completeMission(m.id, m.activity_key)}
+                    disabled={done || !!completing || (remainingXP <= 0 && !isRealworld)}
+                    onClick={() => isRealworld ? setRealworldModalMission(m) : completeMission(m.id, m.activity_key)}
                     whileTap={!done ? { scale: 0.985 } : {}}
                     className={[
                       "flex w-full items-center gap-3 rounded-2xl border p-3.5 text-left transition",
                       done ? "border-teal-100 bg-teal-50"
-                        : remainingXP <= 0 ? "border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed"
+                        : remainingXP <= 0 && !isRealworld ? "border-slate-100 bg-slate-50 opacity-50 cursor-not-allowed"
                           : "border-slate-200 bg-white hover:border-cyan-200 hover:bg-cyan-50 shadow-sm",
                     ].join(" ")}>
                     <span className={done ? "text-teal-500" : "text-slate-300"}>
                       {done ? <CheckCircle2 size={20} /> : <Circle size={20} />}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <div className={`text-sm font-extrabold ${done ? "line-through text-slate-400" : "text-slate-900"}`}>{m.title}</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className={`text-sm font-extrabold ${done ? "line-through text-slate-400" : "text-slate-900"}`}>{m.title}</div>
+                        {isRealworld && (
+                          <span className="rounded-full bg-violet-100 text-violet-700 px-1.5 py-0.5 text-[9px] font-extrabold">🌍 Real-world</span>
+                        )}
+                      </div>
                       <div className="text-xs text-slate-500">{m.description}</div>
                     </div>
                     <span className={`text-xs font-extrabold shrink-0 ${done ? "text-teal-500" : "text-slate-500"}`}>
@@ -652,5 +831,92 @@ export default function StatsPage() {
         </section>
       </div>
     </>
+  );
+}
+
+/* ─── Real-World Mission Submission Modal ──────────────────────────── */
+function RealWorldMissionModal({ mission, onClose, onSubmitted }: {
+  mission: MissionRow;
+  onClose: () => void;
+  onSubmitted: () => void;
+}) {
+  const [reflection, setReflection] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function handleSubmit() {
+    if (reflection.trim().length < 20) {
+      setErr("Please write at least 20 characters of reflection.");
+      return;
+    }
+    setSubmitting(true);
+    setErr(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/gamification/submit-mission-proof", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ mission_id: mission.id, reflection_text: reflection.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed");
+      onSubmitted();
+    } catch (e: any) {
+      setErr(e?.message ?? "Failed");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <motion.div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+      <motion.div
+        initial={{ scale: 0.9, y: 30, opacity: 0 }}
+        animate={{ scale: 1, y: 0, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-start gap-3 mb-4">
+          <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-violet-400 to-cyan-400 text-white shadow-sm">
+            <Sparkles size={18} />
+          </div>
+          <div>
+            <div className="text-base font-extrabold text-slate-900">{mission.title}</div>
+            <div className="text-xs text-slate-500 mt-0.5">🌍 Real-world mission · Needs admin approval</div>
+          </div>
+        </div>
+
+        <p className="text-sm text-slate-600 mb-4">{mission.description}</p>
+
+        <div className="rounded-xl bg-violet-50 border border-violet-100 px-4 py-3 text-xs text-violet-800 leading-relaxed mb-4">
+          ✏️ Complete the mission in real life, then write a short reflection below. Admin will review and award you +{mission.xp_reward} XP.
+        </div>
+
+        <div className="mb-4">
+          <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1.5">
+            Your Reflection <span className="text-rose-500">*</span>
+          </label>
+          <textarea value={reflection} onChange={e => setReflection(e.target.value)} rows={5}
+            placeholder="What did you do? How did it feel? What did you learn?"
+            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 resize-none" />
+          <div className="text-[10px] text-slate-400 mt-1">{reflection.length}/20 minimum characters</div>
+        </div>
+
+        {err && <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 mb-3">{err}</div>}
+
+        <div className="flex gap-2">
+          <button type="button" onClick={handleSubmit} disabled={submitting}
+            className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 px-5 py-2.5 text-sm font-extrabold text-white hover:opacity-95 disabled:opacity-50 shadow-sm">
+            {submitting ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+            {submitting ? "Submitting..." : "Submit for Approval"}
+          </button>
+          <button type="button" onClick={onClose}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-extrabold text-slate-700 hover:bg-slate-50">
+            Cancel
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }

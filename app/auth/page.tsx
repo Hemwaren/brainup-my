@@ -267,10 +267,9 @@ export default function AuthPage() {
               className="relative w-full max-w-md">
 
               <button type="button" onClick={() => router.push("/")} className="flex items-center gap-3 mb-8">
-                <div className="grid h-10 w-10 place-items-center rounded-2xl text-white"
-                  style={{ background: "linear-gradient(135deg,#14b8a6,#22d3ee,#38bdf8)", boxShadow: "0 0 18px rgba(34,211,238,0.4)" }}>
-                  <Brain className="h-5 w-5" />
-                </div>
+                <div className="grid h-10 w-10 place-items-center rounded-2xl overflow-hidden">
+  <img src="/brainup-offlogo.png" alt="BrainUp" className="h-10 w-10 object-contain" />
+</div>
                 <span className="text-lg font-extrabold text-slate-900">BrainUp</span>
               </button>
 
@@ -408,11 +407,9 @@ export default function AuthPage() {
 
           <div className="relative z-10 flex flex-col items-center w-full max-w-md px-8 py-10">
             <div className="flex items-center gap-2.5 mb-6 self-start">
-              <div className="float-anim grid h-9 w-9 place-items-center rounded-xl text-white relative"
-                style={{ background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.35)", backdropFilter: "blur(8px)" }}>
-                <div className="absolute inset-0 rounded-xl" style={{ animation: "pulse-ring 2.8s ease-out infinite" }} />
-                <Brain className="h-4 w-4 relative z-10" />
-              </div>
+              <div className="grid h-9 w-9 place-items-center rounded-xl overflow-hidden">
+  <img src="/brainup-offlogo.png" alt="BrainUp" className="h-9 w-9 object-contain" />
+</div>
               <span className="text-base font-extrabold text-white tracking-tight">BrainUp</span>
             </div>
 

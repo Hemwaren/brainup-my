@@ -88,9 +88,9 @@ function AdminShell({ children }: { children: React.ReactNode }) {
         <div className="mx-auto flex min-h-screen max-w-6xl items-center justify-center px-6">
           <div className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-6 shadow-xl">
             <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white shadow-sm">
-                <Brain size={18} />
-              </div>
+              <div className="grid h-10 w-10 place-items-center rounded-2xl overflow-hidden shadow-sm">
+  <img src="/brainup-offlogo.png" alt="BrainUp" className="h-10 w-10 object-contain" />
+</div>
               <div className="text-base font-extrabold text-slate-900">BrainUp Admin</div>
             </div>
             <div className="mt-6 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
@@ -106,9 +106,9 @@ function AdminShell({ children }: { children: React.ReactNode }) {
   const SidebarContent = (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-3 px-4 pt-5 pb-4">
-        <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white shadow-sm">
-          <Brain size={16} />
-        </div>
+        <div className="grid h-9 w-9 place-items-center rounded-xl overflow-hidden shadow-sm">
+  <img src="/brainup-offlogo.png" alt="BrainUp" className="h-9 w-9 object-contain" />
+</div>
         <div className="leading-tight">
           <div className="text-sm font-extrabold text-slate-900">BrainUp</div>
           <div className="text-[10px] font-semibold text-cyan-500 uppercase tracking-wider">Admin Panel</div>

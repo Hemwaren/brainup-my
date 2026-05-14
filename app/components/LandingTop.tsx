@@ -209,15 +209,9 @@ export default function LandingTop() {
               transition={{ duration: 0.5 }}
               className="flex items-center gap-3"
             >
-              <div
-                className="grid h-11 w-11 place-items-center rounded-2xl text-white"
-                style={{
-                  background: "linear-gradient(135deg,#14b8a6,#22d3ee,#38bdf8)",
-                  boxShadow: "0 0 20px rgba(34,211,238,0.4)",
-                }}
-              >
-                <Brain className="h-6 w-6" />
-              </div>
+              <div className="grid h-11 w-11 place-items-center rounded-2xl overflow-hidden">
+  <img src="/brainup-offlogo.png" alt="BrainUp" className="h-11 w-11 object-contain" />
+</div>
               <span className="text-xl font-extrabold tracking-tight">BrainUp</span>
             </motion.div>
 
@@ -717,15 +711,9 @@ export default function LandingTop() {
             <div className="mx-auto grid max-w-6xl gap-8 px-6 py-8 md:grid-cols-4">
               <div>
                 <div className="flex items-center gap-3">
-                  <div
-                    className="grid h-9 w-9 place-items-center rounded-xl text-white"
-                    style={{
-                      background: "linear-gradient(135deg,#14b8a6,#22d3ee,#38bdf8)",
-                      boxShadow: "0 0 14px rgba(34,211,238,0.28)",
-                    }}
-                  >
-                    <Brain className="h-4 w-4" />
-                  </div>
+                  <div className="grid h-9 w-9 place-items-center rounded-xl overflow-hidden">
+  <img src="/brainup-offlogo.png" alt="BrainUp" className="h-9 w-9 object-contain" />
+</div>
                   <span className="text-base font-extrabold">BrainUp</span>
                 </div>
                 <p className="mt-3 text-xs leading-relaxed text-slate-500">

@@ -742,38 +742,117 @@ function JournalQuotesTab() {
 }
 
 // ─── Gamification Tab ─────────────────────────────────────────────────────────
+// ─── Gamification Tab Types ───────────────────────────────────────────
+type PendingApproval = {
+  id: string;
+  user_id: string;
+  user_name: string;
+  mission_id: string;
+  mission_title: string;
+  reflection_text: string | null;
+  proof_url: string | null;
+  completed_at: string;
+};
+
+type GamificationStats = {
+  totalXP: number;
+  totalUsers: number;
+  avgLevel: number;
+  totalBadges: number;
+  topUsers: Array<{ user_id: string; full_name: string; total_xp: number; level: number }>;
+  missionStats: Array<{ id: string; title: string; completions: number; completion_rate: number }>;
+  pendingCount: number;
+};
+
+// ─── Main Gamification Tab ────────────────────────────────────────────
 function GamificationTab() {
-  const [missions, setMissions] = useState<Mission[]>([]);
-  const [loading,  setLoading]  = useState(true);
-  const [saving,   setSaving]   = useState<string | null>(null);
-  const [msg,      setMsg]      = useState<string | null>(null);
+  const [subTab, setSubTab] = useState<"stats" | "config">("stats");
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2 border-b border-slate-200">
+        <button type="button" onClick={() => setSubTab("stats")}
+          className={["inline-flex items-center gap-2 px-4 py-2.5 text-sm font-extrabold border-b-2 transition -mb-px",
+            subTab === "stats" ? "border-cyan-500 text-cyan-600" : "border-transparent text-slate-500 hover:text-slate-700"].join(" ")}>
+          <BarChart3 size={14} /> Gamification Stats
+        </button>
+        <button type="button" onClick={() => setSubTab("config")}
+          className={["inline-flex items-center gap-2 px-4 py-2.5 text-sm font-extrabold border-b-2 transition -mb-px",
+            subTab === "config" ? "border-cyan-500 text-cyan-600" : "border-transparent text-slate-500 hover:text-slate-700"].join(" ")}>
+          <Trophy size={14} /> Configuration
+        </button>
+      </div>
+      {subTab === "stats" ? <GamificationStatsTab /> : <GamificationConfigTab />}
+    </div>
+  );
+}
 
-  const fetchMissions = useCallback(async () => {
-    const { data } = await supabase.from("daily_missions").select("id, title, description, activity_key, xp_reward, is_active").order("xp_reward", { ascending: false });
-    setMissions(data ?? []); setLoading(false);
+// ─── Stats Sub-Tab ────────────────────────────────────────────────────
+function GamificationStatsTab() {
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<GamificationStats | null>(null);
+
+  const fetchStats = useCallback(async () => {
+    setLoading(true);
+    const [
+      { data: gamiData },
+      { data: xpData },
+      { data: badgeData },
+      { data: missions },
+      { data: completions },
+      { data: pending },
+      { data: profiles },
+    ] = await Promise.all([
+      supabase.from("user_gamification").select("user_id, total_xp, level"),
+      supabase.from("xp_transactions").select("xp_awarded"),
+      supabase.from("user_badges").select("id"),
+      supabase.from("daily_missions").select("id, title, is_active"),
+      supabase.from("user_mission_completions").select("mission_id, status"),
+      supabase.from("user_mission_completions").select("id").eq("status", "pending"),
+      supabase.from("profiles").select("id, full_name").eq("role", "EMPLOYEE"),
+    ]);
+
+    const totalXP = (xpData ?? []).reduce((s: number, t: any) => s + (t.xp_awarded ?? 0), 0);
+    const totalUsers = (gamiData ?? []).length;
+    const avgLevel = totalUsers > 0
+      ? (gamiData ?? []).reduce((s: number, g: any) => s + (g.level ?? 1), 0) / totalUsers
+      : 0;
+
+    const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p.full_name]));
+    const topUsers = (gamiData ?? [])
+      .sort((a: any, b: any) => (b.total_xp ?? 0) - (a.total_xp ?? 0))
+      .slice(0, 5)
+      .map((g: any) => ({
+        user_id: g.user_id,
+        full_name: profileMap.get(g.user_id) ?? "Employee",
+        total_xp: g.total_xp ?? 0,
+        level: g.level ?? 1,
+      }));
+
+    const approvedCompletions = (completions ?? []).filter((c: any) => c.status === "approved" || c.status === null);
+    const missionStats = (missions ?? []).map((m: any) => {
+      const count = approvedCompletions.filter((c: any) => c.mission_id === m.id).length;
+      return { id: m.id, title: m.title, completions: count, completion_rate: totalUsers > 0 ? (count / totalUsers) * 100 : 0 };
+    }).sort((a, b) => b.completions - a.completions);
+
+    setStats({ totalXP, totalUsers, avgLevel, totalBadges: (badgeData ?? []).length, topUsers, missionStats, pendingCount: (pending ?? []).length });
+    setLoading(false);
   }, []);
-  useEffect(() => { fetchMissions(); }, [fetchMissions]);
 
-  async function toggleMission(m: Mission) {
-    setSaving(m.id);
-    await supabase.from("daily_missions").update({ is_active: !m.is_active }).eq("id", m.id);
-    setMissions((prev) => prev.map((x) => x.id === m.id ? { ...x, is_active: !x.is_active } : x)); setSaving(null);
-  }
-  async function updateXP(id: string, xp: number) {
-    if (xp < 1 || xp > 50) return;
-    await supabase.from("daily_missions").update({ xp_reward: xp }).eq("id", id);
-    setMissions((prev) => prev.map((x) => x.id === id ? { ...x, xp_reward: xp } : x));
-    setMsg("XP updated."); setTimeout(() => setMsg(null), 2000);
-  }
+  useEffect(() => { fetchStats(); }, [fetchStats]);
 
-  if (loading) return <div className="text-sm text-slate-500">Loading missions...</div>;
-  const activeMissions = missions.filter((m) => m.is_active);
-  const inactiveMissions = missions.filter((m) => !m.is_active);
+  if (loading) return <div className="text-sm text-slate-500">Loading stats...</div>;
+  if (!stats) return null;
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-3">
-        {[{ label: "Total Missions", value: missions.length, icon: <Trophy size={14} />, color: "bg-slate-50 text-slate-600" }, { label: "Active", value: activeMissions.length, icon: <CheckCircle2 size={14} />, color: "bg-emerald-50 text-emerald-600" }, { label: "Total XP Pool", value: activeMissions.reduce((s, m) => s + m.xp_reward, 0), icon: <Zap size={14} />, color: "bg-cyan-50 text-cyan-600" }].map((s) => (
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {[
+          { label: "Total XP Awarded", value: stats.totalXP.toLocaleString(), icon: <Zap size={14} />, color: "bg-cyan-50 text-cyan-600" },
+          { label: "Active Users", value: stats.totalUsers, icon: <Trophy size={14} />, color: "bg-violet-50 text-violet-600" },
+          { label: "Avg Level", value: stats.avgLevel.toFixed(1), icon: <BarChart3 size={14} />, color: "bg-emerald-50 text-emerald-600" },
+          { label: "Badges Awarded", value: stats.totalBadges, icon: <CheckCircle2 size={14} />, color: "bg-amber-50 text-amber-600" },
+          { label: "Pending Approvals", value: stats.pendingCount, icon: <Sparkles size={14} />, color: stats.pendingCount > 0 ? "bg-rose-50 text-rose-600" : "bg-slate-50 text-slate-500" },
+        ].map(s => (
           <div key={s.label} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
             <div className={`inline-flex h-7 w-7 place-items-center grid rounded-lg ${s.color} mb-2`}>{s.icon}</div>
             <div className="text-xl font-extrabold text-slate-900">{s.value}</div>
@@ -781,43 +860,533 @@ function GamificationTab() {
           </div>
         ))}
       </div>
-      <div className="rounded-xl border border-cyan-100 bg-cyan-50 px-4 py-3 text-sm text-cyan-700"><span className="font-bold">Note:</span> Toggle missions on/off to control what employees see.</div>
-      {msg && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">{msg}</div>}
-      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-2"><CheckCircle2 size={14} className="text-emerald-500" /><div className="text-sm font-extrabold text-slate-900">Active Missions ({activeMissions.length})</div></div>
-        <div className="divide-y divide-slate-100">{activeMissions.map((m) => <MissionRow key={m.id} mission={m} onToggle={toggleMission} onXPChange={updateXP} saving={saving === m.id} />)}</div>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-2 mb-4">
+          <Trophy size={15} className="text-amber-500" />
+          <div className="text-sm font-extrabold text-slate-900">Top 5 Employees by XP</div>
+        </div>
+        {stats.topUsers.length === 0 ? (
+          <p className="text-sm text-slate-400 text-center py-4">No active employees yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {stats.topUsers.map((u, i) => (
+              <div key={u.user_id} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                <div className={["grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-extrabold",
+                  i === 0 ? "bg-amber-100 text-amber-700" : i === 1 ? "bg-slate-200 text-slate-600" : i === 2 ? "bg-orange-100 text-orange-700" : "bg-slate-100 text-slate-500"].join(" ")}>
+                  #{i + 1}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-extrabold text-slate-800 truncate">{u.full_name}</div>
+                  <div className="text-xs text-slate-400">Level {u.level}</div>
+                </div>
+                <div className="text-sm font-extrabold text-cyan-600">{u.total_xp.toLocaleString()} XP</div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
-      {inactiveMissions.length > 0 && (
-        <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-2"><XCircle size={14} className="text-slate-400" /><div className="text-sm font-extrabold text-slate-900">Inactive Missions ({inactiveMissions.length})</div></div>
-          <div className="divide-y divide-slate-100">{inactiveMissions.map((m) => <MissionRow key={m.id} mission={m} onToggle={toggleMission} onXPChange={updateXP} saving={saving === m.id} />)}</div>
-        </section>
-      )}
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-2 mb-1">
+          <BarChart3 size={15} className="text-cyan-500" />
+          <div className="text-sm font-extrabold text-slate-900">Mission Performance</div>
+        </div>
+        <p className="text-xs text-slate-400 mb-4">Sorted by completions. Low rates = consider revising that mission.</p>
+        {stats.missionStats[0] && (
+          <div className="mb-4 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
+            <div className="text-[10px] font-extrabold uppercase tracking-wider text-amber-700 mb-1">🏆 Most Popular</div>
+            <div className="text-sm font-extrabold text-amber-900">{stats.missionStats[0].title}</div>
+            <div className="text-xs text-amber-700 mt-0.5">{stats.missionStats[0].completions} completions · {stats.missionStats[0].completion_rate.toFixed(1)}% of employees</div>
+          </div>
+        )}
+        <div className="space-y-1.5">
+          {stats.missionStats.map(m => (
+            <div key={m.id} className="flex items-center gap-3 rounded-lg border border-slate-100 px-3 py-2.5">
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-bold text-slate-800 truncate">{m.title}</div>
+                <div className="flex items-center gap-2 mt-1">
+                  <div className="h-1.5 flex-1 rounded-full bg-slate-100 overflow-hidden max-w-[200px]">
+                    <div className="h-full rounded-full bg-gradient-to-r from-teal-400 to-cyan-500" style={{ width: `${Math.min(100, m.completion_rate)}%` }} />
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-500">{m.completion_rate.toFixed(0)}%</span>
+                </div>
+              </div>
+              <div className="text-xs font-extrabold text-slate-700 shrink-0">{m.completions}</div>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
 
-function MissionRow({ mission: m, onToggle, onXPChange, saving }: { mission: Mission; onToggle: (m: Mission) => void; onXPChange: (id: string, xp: number) => void; saving: boolean }) {
-  const [xpInput, setXpInput] = useState(String(m.xp_reward));
+// ─── Configuration Sub-Tab ────────────────────────────────────────────
+function GamificationConfigTab() {
+  const [missions, setMissions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    title: "", description: "", activity_key: "daily_emotion_checkin",
+    xp_reward: 5, verification_type: "platform", requires_reflection: false, is_active: true,
+  });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ text: string; type: "success" | "error" } | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [pendingList, setPendingList] = useState<PendingApproval[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(true);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+
+  const fetchMissions = useCallback(async () => {
+    const { data } = await supabase.from("daily_missions").select("*").order("created_at", { ascending: false });
+    setMissions(data ?? []);
+    setLoading(false);
+  }, []);
+
+  const fetchPending = useCallback(async () => {
+    setPendingLoading(true);
+    const { data: completions } = await supabase
+      .from("user_mission_completions")
+      .select("id, user_id, mission_id, reflection_text, proof_url, completed_at")
+      .eq("status", "pending")
+      .order("completed_at", { ascending: false });
+
+    if (!completions || completions.length === 0) { setPendingList([]); setPendingLoading(false); return; }
+
+    const userIds = [...new Set(completions.map((c: any) => c.user_id))];
+    const missionIds = [...new Set(completions.map((c: any) => c.mission_id))];
+
+    const [{ data: profiles }, { data: missionData }] = await Promise.all([
+      supabase.from("profiles").select("id, full_name").in("id", userIds),
+      supabase.from("daily_missions").select("id, title").in("id", missionIds),
+    ]);
+
+    const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p.full_name]));
+    const missionMap = new Map((missionData ?? []).map((m: any) => [m.id, m.title]));
+
+    setPendingList(completions.map((c: any) => ({
+      id: c.id, user_id: c.user_id,
+      user_name: profileMap.get(c.user_id) ?? "Employee",
+      mission_id: c.mission_id,
+      mission_title: missionMap.get(c.mission_id) ?? "Unknown mission",
+      reflection_text: c.reflection_text,
+      proof_url: c.proof_url,
+      completed_at: c.completed_at,
+    })));
+    setPendingLoading(false);
+  }, []);
+
+  useEffect(() => { fetchMissions(); fetchPending(); }, [fetchMissions, fetchPending]);
+
+  function openCreate() {
+    setEditingId(null);
+    setForm({ title: "", description: "", activity_key: "daily_emotion_checkin", xp_reward: 5, verification_type: "platform", requires_reflection: false, is_active: true });
+    setShowForm(true); setMsg(null);
+  }
+
+  function openEdit(m: any) {
+    setEditingId(m.id);
+    setForm({ title: m.title, description: m.description, activity_key: m.activity_key, xp_reward: m.xp_reward, verification_type: m.verification_type || "platform", requires_reflection: m.requires_reflection || false, is_active: m.is_active });
+    setShowForm(true); setMsg(null);
+  }
+
+  async function handleSubmit() {
+    if (!form.title.trim() || !form.description.trim()) { setMsg({ text: "Title and description are required.", type: "error" }); return; }
+    setSaving(true);
+    const payload = {
+      ...form,
+      title: form.title.trim(), description: form.description.trim(),
+      activity_key: form.verification_type === "realworld" ? "realworld_mission" : form.activity_key,
+      requires_reflection: form.verification_type === "realworld" ? true : form.requires_reflection,
+    };
+    if (editingId) {
+      const { error } = await supabase.from("daily_missions").update(payload).eq("id", editingId);
+      if (error) { setMsg({ text: error.message, type: "error" }); setSaving(false); return; }
+    } else {
+      const { error } = await supabase.from("daily_missions").insert(payload);
+      if (error) { setMsg({ text: error.message, type: "error" }); setSaving(false); return; }
+    }
+    await fetchMissions(); setShowForm(false); setSaving(false);
+    setMsg({ text: editingId ? "Mission updated." : "Mission created.", type: "success" });
+  }
+
+  async function deleteMission(id: string) {
+    if (!confirm("Delete this mission?")) return;
+    await supabase.from("daily_missions").delete().eq("id", id);
+    await fetchMissions();
+  }
+
+  async function toggleMission(m: any) {
+    await supabase.from("daily_missions").update({ is_active: !m.is_active }).eq("id", m.id);
+    setMissions(prev => prev.map(x => x.id === m.id ? { ...x, is_active: !x.is_active } : x));
+  }
+
+  async function processApproval(completionId: string, action: "approve" | "reject") {
+    setProcessingId(completionId);
+    const { data: { session } } = await supabase.auth.getSession();
+    try {
+      const res = await fetch("/api/admin/approve-mission", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ completion_id: completionId, action }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed");
+      await fetchPending();
+      setMsg({ text: action === "approve" ? `Approved! +${data.xp_awarded} XP awarded to employee.` : "Rejected.", type: "success" });
+    } catch (e: any) {
+      setMsg({ text: e?.message ?? "Failed", type: "error" });
+    } finally {
+      setProcessingId(null);
+    }
+  }
+
+  if (loading) return <div className="text-sm text-slate-500">Loading...</div>;
+
+  const platformMissions = missions.filter(m => (m.verification_type || "platform") === "platform");
+  const realworldMissions = missions.filter(m => m.verification_type === "realworld");
+
   return (
-    <div className={`flex items-center gap-4 px-5 py-3 hover:bg-slate-50 transition ${!m.is_active ? "opacity-60" : ""}`}>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-extrabold text-slate-900">{m.title}</div>
-        <div className="text-xs text-slate-500 mt-0.5">{m.description}</div>
-        <div className="mt-1 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-extrabold text-slate-600">{m.activity_key}</div>
+    <div className="space-y-4">
+      <MissionAIGeneratorModal
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        onUseGenerated={(g) => {
+          setEditingId(null);
+          setForm({ title: g.title, description: g.description, activity_key: g.activity_key, xp_reward: g.xp_reward, verification_type: g.verification_type, requires_reflection: g.requires_reflection, is_active: true });
+          setAiOpen(false); setShowForm(true);
+        }}
+      />
+
+      {msg && !showForm && (
+        <div className={`rounded-xl border px-4 py-3 text-sm font-bold ${msg.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700"}`}>
+          {msg.text}
+        </div>
+      )}
+
+      {/* Pending Approvals */}
+      {pendingLoading ? (
+        <div className="text-xs text-slate-400">Checking pending approvals...</div>
+      ) : pendingList.length > 0 ? (
+        <section className="rounded-2xl border border-amber-200 bg-amber-50/40 p-5 shadow-sm">
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles size={15} className="text-amber-600" />
+            <div className="text-sm font-extrabold text-amber-900">Pending Real-World Approvals ({pendingList.length})</div>
+          </div>
+          <div className="space-y-3">
+            {pendingList.map(p => (
+              <div key={p.id} className="rounded-xl border border-amber-200 bg-white p-4">
+                <div className="mb-2">
+                  <div className="text-sm font-extrabold text-slate-900">{p.mission_title}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    <strong>{p.user_name}</strong> · submitted {new Date(p.completed_at).toLocaleDateString("en-MY", { day: "2-digit", month: "short" })}
+                  </div>
+                </div>
+                {p.reflection_text && (
+                  <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 text-sm text-slate-700 leading-relaxed mb-3 italic">
+                    "{p.reflection_text}"
+                  </div>
+                )}
+                {p.proof_url && (
+                  <button type="button" onClick={() => window.open(p.proof_url!, "_blank")}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-extrabold text-cyan-700 mb-3 hover:bg-cyan-100">
+                    📎 View Proof
+                  </button>
+                )}
+                <div className="flex gap-2 mt-1">
+                  <button type="button"
+                    disabled={processingId === p.id}
+                    onClick={() => processApproval(p.id, "approve")}
+                    style={{ backgroundColor: "#059669", color: "#ffffff" }}
+                    className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-extrabold disabled:opacity-50 transition hover:opacity-90">
+                    {processingId === p.id
+                      ? <Loader2 size={12} className="animate-spin" />
+                      : <CheckCircle2 size={12} />}
+                    Approve
+                  </button>
+                  <button type="button"
+                    disabled={processingId === p.id}
+                    onClick={() => processApproval(p.id, "reject")}
+                    style={{ backgroundColor: "#ffffff", color: "#be123c", border: "1px solid #fecdd3" }}
+                    className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-extrabold disabled:opacity-50 transition hover:opacity-90">
+                    <XCircle size={12} /> Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Action buttons */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="text-sm text-slate-500">
+          {missions.length} missions · {platformMissions.length} platform · {realworldMissions.length} real-world
+        </div>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setAiOpen(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-500 via-cyan-500 to-sky-500 px-4 py-2 text-sm font-extrabold text-white shadow-sm hover:opacity-95">
+            <Wand2 size={14} /> Generate with AI
+          </button>
+          <button type="button" onClick={openCreate}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-extrabold text-slate-700 shadow-sm hover:bg-slate-50">
+            <Plus size={14} /> Add Mission
+          </button>
+        </div>
       </div>
-      <div className="flex items-center gap-1.5 shrink-0">
-        <BarChart3 size={13} className="text-cyan-500" />
-        <input type="number" value={xpInput} min={1} max={50} onChange={(e) => setXpInput(e.target.value)} onBlur={() => onXPChange(m.id, Number(xpInput))}
-          className="w-14 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-extrabold text-center outline-none focus:ring-2 focus:ring-cyan-300" />
-        <span className="text-xs font-bold text-slate-400">XP</span>
+
+      {/* Mission Form */}
+      {showForm && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 text-sm font-extrabold text-slate-900">{editingId ? "Edit Mission" : "New Mission"}</div>
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-bold text-slate-500 block mb-1.5">Mission Type</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setForm(p => ({ ...p, verification_type: "platform", requires_reflection: false }))}
+                  className={`rounded-xl border px-4 py-3 text-left transition ${form.verification_type === "platform" ? "border-cyan-400 bg-cyan-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}>
+                  <div className="text-sm font-extrabold text-slate-900 mb-0.5">🖥️ Platform</div>
+                  <div className="text-[11px] text-slate-500">Auto-verified by app activity</div>
+                </button>
+                <button type="button" onClick={() => setForm(p => ({ ...p, verification_type: "realworld", requires_reflection: true, activity_key: "realworld_mission" }))}
+                  className={`rounded-xl border px-4 py-3 text-left transition ${form.verification_type === "realworld" ? "border-cyan-400 bg-cyan-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}>
+                  <div className="text-sm font-extrabold text-slate-900 mb-0.5">🌍 Real-world</div>
+                  <div className="text-[11px] text-slate-500">Requires reflection + approval</div>
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-500 block mb-1.5">Title *</label>
+              <input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="e.g. Daily Mood Check-in"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300" />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-500 block mb-1.5">Description *</label>
+              <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={2}
+                placeholder="Brief description of the mission..."
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300 resize-none" />
+            </div>
+            {form.verification_type === "platform" && (
+              <div>
+                <label className="text-xs font-bold text-slate-500 block mb-1.5">Activity Key</label>
+                <select value={form.activity_key} onChange={e => setForm(p => ({ ...p, activity_key: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold outline-none focus:ring-2 focus:ring-cyan-300">
+                  <option value="daily_emotion_checkin">Daily Emotion Check-in</option>
+                  <option value="daily_journal_entry">Daily Journal Entry</option>
+                  <option value="read_ei_resource">Read EI Resource</option>
+                  <option value="watch_ei_video">Watch EI Video</option>
+                  <option value="breathing_exercise">Breathing Exercise</option>
+                  <option value="reflection_worksheet">Reflection Worksheet</option>
+                  <option value="ei_mini_quiz">EI Mini Quiz</option>
+                  <option value="full_ei_assessment">Full EI Assessment</option>
+                </select>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-bold text-slate-500 block mb-1.5">XP Reward</label>
+                <input type="number" value={form.xp_reward} min={1} max={50}
+                  onChange={e => setForm(p => ({ ...p, xp_reward: Number(e.target.value) }))}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold outline-none focus:ring-2 focus:ring-cyan-300" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 block mb-1.5">Status</label>
+                <button type="button" onClick={() => setForm(p => ({ ...p, is_active: !p.is_active }))}
+                  className={`w-full rounded-xl border px-3 py-2.5 text-sm font-bold transition ${form.is_active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-100 text-slate-500"}`}>
+                  {form.is_active ? "✓ Active" : "○ Inactive"}
+                </button>
+              </div>
+            </div>
+          </div>
+          {msg && <p className={`mt-3 text-sm font-semibold ${msg.type === "error" ? "text-rose-600" : "text-emerald-600"}`}>{msg.text}</p>}
+          <div className="mt-5 flex gap-3">
+            <button type="button" onClick={handleSubmit} disabled={saving}
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 px-5 py-2.5 text-sm font-extrabold text-white hover:opacity-95 disabled:opacity-50">
+              {saving && <Loader2 size={14} className="animate-spin" />}
+              {saving ? "Saving..." : editingId ? "Update" : "Create Mission"}
+            </button>
+            <button type="button" onClick={() => { setShowForm(false); setMsg(null); }}
+              className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-extrabold text-slate-700 hover:bg-slate-50">
+              Cancel
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* Mission List */}
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-100">
+          <div className="text-sm font-extrabold text-slate-900">All Missions ({missions.length})</div>
+        </div>
+        {missions.length === 0 ? (
+          <div className="p-10 text-center text-sm text-slate-400">No missions yet. Click Add Mission or Generate with AI.</div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {missions.map(m => (
+              <div key={m.id} className={`flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition ${!m.is_active ? "opacity-60" : ""}`}>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                    <div className="text-sm font-extrabold text-slate-900">{m.title}</div>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold ${m.verification_type === "realworld" ? "bg-violet-50 text-violet-700 border border-violet-200" : "bg-cyan-50 text-cyan-700 border border-cyan-200"}`}>
+                      {m.verification_type === "realworld" ? "🌍 Real-world" : "🖥️ Platform"}
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-500">{m.description}</div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-sm font-extrabold text-slate-900">{m.xp_reward}</span>
+                  <span className="text-xs font-bold text-slate-400">XP</span>
+                </div>
+                <button type="button" onClick={() => toggleMission(m)}
+                  className={`inline-flex items-center gap-1 rounded-xl border px-3 py-1.5 text-xs font-extrabold transition ${m.is_active ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-100 text-slate-500"}`}>
+                  {m.is_active ? <CheckCircle2 size={11} /> : <XCircle size={11} />}
+                  {m.is_active ? "Active" : "Inactive"}
+                </button>
+                <button type="button" onClick={() => openEdit(m)}
+                  className="grid h-8 w-8 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50">
+                  <Pencil size={13} />
+                </button>
+                <button type="button" onClick={() => deleteMission(m.id)}
+                  className="grid h-8 w-8 place-items-center rounded-xl border border-rose-200 bg-rose-50 text-rose-500 hover:bg-rose-100">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+// ─── AI Mission Generator Modal ───────────────────────────────────────
+function MissionAIGeneratorModal({ open, onClose, onUseGenerated }: {
+  open: boolean;
+  onClose: () => void;
+  onUseGenerated: (g: any) => void;
+}) {
+  const [theme, setTheme] = useState("");
+  const [missionType, setMissionType] = useState<"platform" | "realworld">("platform");
+  const [generating, setGenerating] = useState(false);
+  const [result, setResult] = useState<any>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [ragUsed, setRagUsed] = useState(false);
+  const [similarCount, setSimilarCount] = useState(0);
+
+  function reset() { setTheme(""); setMissionType("platform"); setResult(null); setErr(null); setRagUsed(false); setSimilarCount(0); }
+  function handleClose() { reset(); onClose(); }
+
+  async function handleGenerate() {
+    if (!theme.trim()) { setErr("Please enter a theme."); return; }
+    setGenerating(true); setErr(null); setResult(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/generate-mission", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ theme: theme.trim(), mission_type: missionType }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Generation failed");
+      setResult(data.generated); setRagUsed(data.rag_used); setSimilarCount(data.similar_count);
+    } catch (e: any) {
+      setErr(e?.message ?? "Failed to generate.");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-6 backdrop-blur-sm">
+      <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-2xl max-h-[92vh] overflow-hidden flex flex-col">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-gradient-to-br from-violet-50 via-cyan-50 to-sky-50 px-6 py-4">
+          <div className="flex items-start gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-violet-400 via-cyan-400 to-sky-400 text-white shadow-sm">
+              <Wand2 size={17} />
+            </div>
+            <div>
+              <div className="text-base font-extrabold text-slate-900">AI Mission Generator</div>
+              <div className="text-xs text-slate-600 mt-0.5">Powered by <span className="font-extrabold text-violet-600">Groq</span> + <span className="font-extrabold text-cyan-600">RAG</span></div>
+            </div>
+          </div>
+          <button type="button" onClick={handleClose}
+            className="grid h-8 w-8 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50">
+            <X size={14} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {!result ? (
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1.5">Theme *</label>
+                <input value={theme} onChange={e => setTheme(e.target.value)} placeholder="e.g. Empathy, Stress management, Team connection..."
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100" />
+              </div>
+              <div>
+                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1.5">Mission Type</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setMissionType("platform")}
+                    className={`rounded-xl border px-4 py-3 text-left transition ${missionType === "platform" ? "border-cyan-400 bg-cyan-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}>
+                    <div className="text-sm font-extrabold text-slate-900 mb-0.5">🖥️ Platform</div>
+                    <div className="text-[11px] text-slate-500">Auto-verified app actions</div>
+                  </button>
+                  <button type="button" onClick={() => setMissionType("realworld")}
+                    className={`rounded-xl border px-4 py-3 text-left transition ${missionType === "realworld" ? "border-cyan-400 bg-cyan-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}>
+                    <div className="text-sm font-extrabold text-slate-900 mb-0.5">🌍 Real-world</div>
+                    <div className="text-[11px] text-slate-500">Outside app, needs reflection</div>
+                  </button>
+                </div>
+              </div>
+              {err && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{err}</div>}
+              <button type="button" onClick={handleGenerate} disabled={generating}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-500 via-cyan-500 to-sky-500 px-5 py-3 text-sm font-extrabold text-white hover:opacity-95 disabled:opacity-50 shadow-sm">
+                {generating ? <><Loader2 size={15} className="animate-spin" /> Generating...</> : <><Wand2 size={15} /> Generate Mission</>}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {ragUsed && (
+                <div className="inline-flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-[10px] font-extrabold text-violet-700">
+                  <Database size={10} /> RAG checked {similarCount} existing missions
+                </div>
+              )}
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+                <div>
+                  <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Title</div>
+                  <div className="text-sm font-extrabold text-slate-900">{result.title}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Description</div>
+                  <div className="text-sm text-slate-700">{result.description}</div>
+                </div>
+                <div className="flex gap-4 pt-2 border-t border-slate-100">
+                  <div>
+                    <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Type</div>
+                    <div className="text-xs font-bold text-slate-700">{result.verification_type === "realworld" ? "🌍 Real-world" : "🖥️ Platform"}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">XP</div>
+                    <div className="text-xs font-bold text-slate-700">+{result.xp_reward}</div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => onUseGenerated(result)}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500 px-5 py-2.5 text-sm font-extrabold text-white hover:opacity-95 shadow-sm">
+                  <CheckCircle2 size={14} /> Use This Mission
+                </button>
+                <button type="button" onClick={() => setResult(null)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-extrabold text-slate-700 hover:bg-slate-50">
+                  <RefreshCw size={13} /> Regenerate
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-      <button type="button" onClick={() => onToggle(m)} disabled={saving}
-        className={["inline-flex items-center gap-1 rounded-xl border px-3 py-1.5 text-xs font-extrabold transition",
-          m.is_active ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-slate-200 bg-slate-100 text-slate-500 hover:bg-slate-200"].join(" ")}>
-        {saving ? <Loader2 size={11} className="animate-spin" /> : m.is_active ? <CheckCircle2 size={11} /> : <XCircle size={11} />}
-        {m.is_active ? "Active" : "Inactive"}
-      </button>
     </div>
   );
 }

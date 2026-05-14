@@ -10,9 +10,21 @@ import {
   Settings, BookOpen, ClipboardList, LibraryBig, NotebookPen,
   Trophy, LogOut, Search, BarChart3, Gift, Users, LayoutGrid,
   Sparkles, X, FileText, Megaphone, HeartHandshake, ArrowRight, LifeBuoy,
+  CheckCircle2, XCircle, Trash2, CheckCheck, Info,
 } from "lucide-react";
 
 type AppRole = "EMPLOYEE" | "HR" | "ADMIN" | string;
+
+type AppNotification = {
+  id: string;
+  type: "mission_approved" | "mission_rejected" | "info";
+  title: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+  metadata?: Record<string, any>;
+};
+
 type Profile = {
   full_name: string;
   email: string;
@@ -302,7 +314,92 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const [gamificationOpen, setGamificationOpen] = useState(false);
   const [hrOpen, setHrOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [notiCount] = useState(0);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [notiOpen, setNotiOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectMode, setSelectMode] = useState(false);
+  const notiRef = useRef<HTMLDivElement>(null);
+
+  const notiCount = notifications.filter(n => !n.is_read).length;
+
+  const fetchNotifications = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await supabase
+      .from("user_notifications")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    setNotifications(data ?? []);
+  }, []);
+
+  useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
+
+  // Realtime notifications
+  useEffect(() => {
+    let userId: string | null = null;
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      userId = user.id;
+      const ch = supabase.channel(`notifications:${userId}`)
+        .on("postgres_changes",
+          { event: "INSERT", schema: "public", table: "user_notifications", filter: `user_id=eq.${userId}` },
+          (p) => setNotifications(prev => [p.new as AppNotification, ...prev]))
+        .subscribe();
+      return () => { supabase.removeChannel(ch); };
+    });
+  }, []);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (notiRef.current && !notiRef.current.contains(e.target as Node)) {
+        setNotiOpen(false);
+        setSelectMode(false);
+        setSelectedIds(new Set());
+      }
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, []);
+
+  async function markAllRead() {
+    const unreadIds = notifications.filter(n => !n.is_read).map(n => n.id);
+    if (unreadIds.length === 0) return;
+    await supabase.from("user_notifications").update({ is_read: true }).in("id", unreadIds);
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+  }
+
+  async function clearAll() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase.from("user_notifications").delete().eq("user_id", user.id);
+    setNotifications([]);
+    setNotiOpen(false);
+  }
+
+  async function deleteSelected() {
+    if (selectedIds.size === 0) return;
+    const ids = [...selectedIds];
+    await supabase.from("user_notifications").delete().in("id", ids);
+    setNotifications(prev => prev.filter(n => !selectedIds.has(n.id)));
+    setSelectedIds(new Set());
+    setSelectMode(false);
+  }
+
+  async function markRead(id: string) {
+    await supabase.from("user_notifications").update({ is_read: true }).eq("id", id);
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   useEffect(() => {
     let alive = true;
@@ -376,9 +473,9 @@ function AppShell({ children }: { children: React.ReactNode }) {
         <div className="mx-auto flex min-h-screen max-w-6xl items-center justify-center px-6">
           <div className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white shadow-sm">
-                <Brain size={18} />
-              </div>
+              <div className="grid h-10 w-10 place-items-center rounded-2xl overflow-hidden shadow-sm">
+  <img src="/brainup-offlogo.png" alt="BrainUp" className="h-10 w-10 object-contain" />
+</div>
               <div className="text-base font-extrabold text-slate-900">BrainUp</div>
             </div>
             <div className="mt-6 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
@@ -394,9 +491,9 @@ function AppShell({ children }: { children: React.ReactNode }) {
   const SidebarContent = (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-3 px-4 pt-5 pb-4">
-        <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white shadow-sm">
-          <Brain size={16} />
-        </div>
+        <div className="grid h-9 w-9 place-items-center rounded-xl overflow-hidden shadow-sm">
+  <img src="/brainup-offlogo.png" alt="BrainUp" className="h-9 w-9 object-contain" />
+</div>
         <div className="leading-tight">
           <div className="text-sm font-extrabold text-slate-900">BrainUp</div>
           <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">EI Platform</div>
@@ -513,16 +610,135 @@ function AppShell({ children }: { children: React.ReactNode }) {
                 {/* ✅ Search component */}
                 <GlobalSearch />
 
-                <button type="button"
-                  className="relative grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition"
-                  aria-label="Notifications">
-                  <Bell size={16} />
-                  {notiCount > 0 && (
-                    <span className="absolute -right-1 -top-1 grid h-4 min-w-[16px] place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
-                      {notiCount}
-                    </span>
+                {/* ── Notification Bell + Dropdown ── */}
+                <div ref={notiRef} className="relative">
+                  <button type="button"
+                    onClick={async () => {
+                      setNotiOpen(v => !v);
+                      setSelectMode(false);
+                      setSelectedIds(new Set());
+                      if (!notiOpen && notiCount > 0) await markAllRead();
+                    }}
+                    className="relative grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition"
+                    aria-label="Notifications">
+                    <Bell size={16} />
+                    {notiCount > 0 && (
+                      <span className="absolute -right-1 -top-1 grid h-4 min-w-[16px] place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white animate-pulse">
+                        {notiCount > 9 ? "9+" : notiCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {notiOpen && (
+                    <div className="absolute right-0 top-11 z-50 w-80 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
+                      style={{ maxHeight: "480px", display: "flex", flexDirection: "column" }}>
+
+                      {/* Header */}
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0">
+                        <div className="flex items-center gap-2">
+                          <Bell size={14} className="text-cyan-500" />
+                          <span className="text-sm font-extrabold text-slate-900">Notifications</span>
+                          {notiCount > 0 && (
+                            <span className="rounded-full bg-rose-100 text-rose-600 px-2 py-0.5 text-[10px] font-extrabold">
+                              {notiCount} new
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {notifications.length > 0 && (
+                            <>
+                              <button type="button"
+                                onClick={() => { setSelectMode(v => !v); setSelectedIds(new Set()); }}
+                                className={`rounded-lg px-2 py-1 text-[10px] font-extrabold transition ${selectMode ? "bg-cyan-100 text-cyan-700" : "text-slate-500 hover:bg-slate-100"}`}>
+                                {selectMode ? "Cancel" : "Select"}
+                              </button>
+                              {!selectMode && (
+                                <button type="button" onClick={clearAll}
+                                  className="rounded-lg px-2 py-1 text-[10px] font-extrabold text-slate-500 hover:bg-slate-100 transition">
+                                  Clear all
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Select mode actions */}
+                      {selectMode && selectedIds.size > 0 && (
+                        <div className="flex items-center justify-between px-4 py-2 bg-cyan-50 border-b border-cyan-100 shrink-0">
+                          <span className="text-xs font-bold text-cyan-700">{selectedIds.size} selected</span>
+                          <button type="button" onClick={deleteSelected}
+                            className="inline-flex items-center gap-1 rounded-lg bg-rose-500 px-3 py-1 text-[11px] font-extrabold text-white hover:opacity-90">
+                            <Trash2 size={11} /> Delete
+                          </button>
+                        </div>
+                      )}
+
+                      {/* List */}
+                      <div className="overflow-y-auto flex-1">
+                        {notifications.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-10 text-center">
+                            <Bell size={28} className="text-slate-200 mb-2" />
+                            <div className="text-sm font-bold text-slate-400">No notifications yet</div>
+                            <div className="text-xs text-slate-300 mt-0.5">You&apos;re all caught up!</div>
+                          </div>
+                        ) : (
+                          <div className="divide-y divide-slate-100">
+                            {notifications.map(n => {
+                              const isSelected = selectedIds.has(n.id);
+                              const icon = n.type === "mission_approved"
+                                ? <CheckCircle2 size={16} className="text-emerald-500 shrink-0 mt-0.5" />
+                                : n.type === "mission_rejected"
+                                  ? <XCircle size={16} className="text-rose-500 shrink-0 mt-0.5" />
+                                  : <Info size={16} className="text-cyan-500 shrink-0 mt-0.5" />;
+                              return (
+                                <div key={n.id}
+                                  onClick={() => {
+                                    if (selectMode) { toggleSelect(n.id); return; }
+                                    if (!n.is_read) markRead(n.id);
+                                  }}
+                                  className={[
+                                    "flex items-start gap-3 px-4 py-3 cursor-pointer transition",
+                                    !n.is_read ? "bg-cyan-50/60" : "bg-white",
+                                    isSelected ? "bg-cyan-100" : "",
+                                    "hover:bg-slate-50",
+                                  ].join(" ")}>
+                                  {selectMode && (
+                                    <div className={`mt-1 h-4 w-4 shrink-0 rounded border-2 transition ${isSelected ? "bg-cyan-500 border-cyan-500" : "border-slate-300 bg-white"}`}>
+                                      {isSelected && <CheckCheck size={10} className="text-white m-auto mt-px" />}
+                                    </div>
+                                  )}
+                                  {icon}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-start justify-between gap-1">
+                                      <div className={`text-xs font-extrabold ${!n.is_read ? "text-slate-900" : "text-slate-600"}`}>
+                                        {n.title}
+                                      </div>
+                                      {!n.is_read && (
+                                        <div className="h-2 w-2 rounded-full bg-cyan-500 shrink-0 mt-1" />
+                                      )}
+                                    </div>
+                                    <div className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{n.message}</div>
+                                    <div className="text-[10px] text-slate-400 mt-1">
+                                      {new Date(n.created_at).toLocaleDateString("en-MY", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Footer */}
+                      {notifications.length > 0 && (
+                        <div className="px-4 py-2.5 border-t border-slate-100 text-center shrink-0">
+                          <span className="text-[10px] text-slate-400">{notifications.length} notification{notifications.length !== 1 ? "s" : ""} total</span>
+                        </div>
+                      )}
+                    </div>
                   )}
-                </button>
+                </div>
 
                 <button type="button"
                   className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 hover:bg-slate-50 transition"
