@@ -6,13 +6,13 @@ import { supabase } from "@/lib/supabaseClient";
 import {
   BrainCircuit, Users, ChevronRight, RefreshCw, Loader2,
   TrendingUp, TrendingDown, Minus, AlertTriangle, CheckCircle2,
-  HeartPulse, BookOpen, Zap, CalendarCheck, Sparkles,
-  MessageSquare, UserCheck, Send, ClipboardList, X,
-  ArrowLeft, Activity, Target, Mail, Calendar,
-  Monitor, WifiOff,
+  CalendarCheck, Sparkles, MessageSquare, UserCheck, Send,
+  ClipboardList, X, ArrowLeft, Activity, Target, Mail, Calendar,
+  Monitor, WifiOff, ChevronDown, ArrowUpDown,
 } from "lucide-react";
 
 type RiskLevel = "THRIVING" | "MONITOR" | "NEEDS ATTENTION" | "CRITICAL";
+type SortKey = "risk_score" | "name" | "department" | "work_signal";
 
 interface TeamEmployee {
   id: string;
@@ -81,7 +81,14 @@ const ACTION_LABELS: Record<string, string> = {
   nudge_sent:          "Nudge Sent",
 };
 
-const AUTO_REFRESH_MS = 5_000; // 5 seconds
+const AUTO_REFRESH_MS = 5_000;
+
+const SIGNAL_ORDER: Record<string, number> = {
+  HIGH: 0, BALANCED: 0, NORMAL: 0, GOOD: 0, ACTIVE: 0, GROWING: 0, THRIVING: 0,
+  MEDIUM: 1, MODERATE: 1, ELEVATED: 1, WARNING: 1, DECLINING: 1, STABLE: 1, MONITOR: 1,
+  LOW: 2, OVERLOADED: 2, HIGH_VOLUME: 2, AT_RISK: 2, DISENGAGED: 2, "NEEDS ATTENTION": 2,
+  NO_DATA: 3, CRITICAL: 4,
+};
 
 async function authHeaders(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -143,14 +150,6 @@ function SignalChip({ signal }: { signal: string }) {
   );
 }
 
-function MockBadge() {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-400 font-semibold">
-      <WifiOff size={9} /> simulated
-    </span>
-  );
-}
-
 function scoreColor(score: number) {
   if (score >= 75) return "bg-emerald-500";
   if (score >= 50) return "bg-amber-500";
@@ -165,7 +164,12 @@ function SignalCard({ title, icon, signal, score, isMock, children }: {
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-slate-700 font-bold text-sm">
-          {icon}{title}{isMock && <MockBadge />}
+          {icon}{title}
+          {isMock && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-400 font-semibold">
+              <WifiOff size={9} /> not connected
+            </span>
+          )}
         </div>
         <SignalChip signal={signal} />
       </div>
@@ -210,7 +214,7 @@ function ActionModal({ open, actionType, employeeId, onClose, onDone }: {
       <div className="w-full max-w-md rounded-2xl bg-white shadow-xl p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-extrabold text-slate-800 flex items-center gap-2">{meta?.icon}{meta?.label}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={18} /></button>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
         </div>
         <div className="space-y-2">
           <label className="block text-sm font-semibold text-slate-600">Notes (optional)</label>
@@ -220,8 +224,8 @@ function ActionModal({ open, actionType, employeeId, onClose, onDone }: {
         </div>
         {err && <p className="text-xs text-rose-600">{err}</p>}
         <div className="flex gap-3">
-          <button onClick={onClose} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all">Cancel</button>
-          <button onClick={handleSubmit} disabled={loading} className={`flex-1 rounded-xl py-2.5 text-sm font-bold text-white transition-all disabled:opacity-50 ${meta?.color}`}>
+          <button onClick={onClose} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Cancel</button>
+          <button onClick={handleSubmit} disabled={loading} className={`flex-1 rounded-xl py-2.5 text-sm font-bold text-white disabled:opacity-50 ${meta?.color}`}>
             {loading ? <Loader2 size={14} className="animate-spin mx-auto" /> : "Confirm"}
           </button>
         </div>
@@ -230,20 +234,59 @@ function ActionModal({ open, actionType, employeeId, onClose, onDone }: {
   );
 }
 
+// ─── Sort Dropdown ────────────────────────────────────────────────────────────
+function SortDropdown({ value, onChange }: { value: SortKey; onChange: (v: SortKey) => void }) {
+  const [open, setOpen] = useState(false);
+  const options: { key: SortKey; label: string }[] = [
+    { key: "risk_score", label: "Overall Score" },
+    { key: "name", label: "Name" },
+    { key: "department", label: "Department" },
+    { key: "work_signal", label: "Work Signal" },
+  ];
+  const current = options.find(o => o.key === value);
+  return (
+    <div className="relative">
+      <button onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-all">
+        <ArrowUpDown size={13} className="text-slate-400" />
+        Sort: <span className="font-semibold text-slate-700">{current?.label}</span>
+        <ChevronDown size={13} className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-20 w-44 rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden">
+          {options.map(o => (
+            <button key={o.key} onClick={() => { onChange(o.key); setOpen(false); }}
+              className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${value === o.key ? "bg-teal-50 text-teal-700 font-bold" : "text-slate-600 hover:bg-slate-50"}`}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Team Overview Table ──────────────────────────────────────────────────────
 function TeamOverview({ employees, onSelect, refreshing, onRefresh, lastRefreshed }: {
   employees: TeamEmployee[]; onSelect: (id: string) => void;
   refreshing: boolean; onRefresh: () => void; lastRefreshed: Date | null;
 }) {
-  const totals = {
-    thriving:  employees.filter(e => e.risk_level === "THRIVING").length,
-    monitor:   employees.filter(e => e.risk_level === "MONITOR").length,
-    attention: employees.filter(e => e.risk_level === "NEEDS ATTENTION").length,
-    critical:  employees.filter(e => e.risk_level === "CRITICAL").length,
-  };
+  const [sortKey, setSortKey] = useState<SortKey>("risk_score");
+
+  const sorted = [...employees].sort((a, b) => {
+    switch (sortKey) {
+      case "risk_score": return a.risk_score - b.risk_score;
+      case "name": return a.name.localeCompare(b.name);
+      case "department": return a.department.localeCompare(b.department);
+      case "work_signal": return (SIGNAL_ORDER[a.signals.work_behaviour.signal] ?? 9) - (SIGNAL_ORDER[b.signals.work_behaviour.signal] ?? 9);
+      default: return 0;
+    }
+  });
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-extrabold text-slate-800 flex items-center gap-2">
             <BrainCircuit size={20} className="text-cyan-500" />EI Insights Dashboard
@@ -252,12 +295,13 @@ function TeamOverview({ employees, onSelect, refreshing, onRefresh, lastRefreshe
             4-source wellbeing intelligence — Calendar · Gmail · In-App · Work Behaviour
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
           {lastRefreshed && (
             <span className="text-xs text-slate-400">
               Updated {lastRefreshed.toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
             </span>
           )}
+          <SortDropdown value={sortKey} onChange={setSortKey} />
           <button onClick={onRefresh} disabled={refreshing}
             className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-50">
             <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />
@@ -266,85 +310,138 @@ function TeamOverview({ employees, onSelect, refreshing, onRefresh, lastRefreshe
         </div>
       </div>
 
-
+      {/* Table */}
       <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100">
-                <th className="text-left py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wide">Employee</th>
-                <th className="text-center py-3 px-3 text-xs font-bold text-slate-500 uppercase tracking-wide">
+                {/* Col 1: Employee */}
+                <th className="text-left py-3 px-4 text-xs font-bold text-slate-500 uppercase tracking-wide min-w-[160px]">Employee</th>
+                {/* Col 2: Dept */}
+                <th className="text-left py-3 px-3 text-xs font-bold text-slate-500 uppercase tracking-wide min-w-[100px]">Dept</th>
+                {/* Col 3: Email */}
+                <th className="text-left py-3 px-3 text-xs font-bold text-slate-500 uppercase tracking-wide min-w-[160px]">Email</th>
+                {/* Col 4: Google */}
+                <th className="text-center py-3 px-3 text-xs font-bold text-slate-500 uppercase tracking-wide min-w-[80px]">Google</th>
+                {/* Col 5: Calendar */}
+                <th className="text-center py-3 px-3 text-xs font-bold text-slate-500 uppercase tracking-wide min-w-[100px]">
                   <div className="flex items-center justify-center gap-1"><Calendar size={11} />Calendar</div>
                 </th>
-                <th className="text-center py-3 px-3 text-xs font-bold text-slate-500 uppercase tracking-wide">
+                {/* Col 6: Gmail */}
+                <th className="text-center py-3 px-3 text-xs font-bold text-slate-500 uppercase tracking-wide min-w-[100px]">
                   <div className="flex items-center justify-center gap-1"><Mail size={11} />Gmail</div>
                 </th>
-                <th className="text-center py-3 px-3 text-xs font-bold text-slate-500 uppercase tracking-wide">
-                  <div className="flex items-center justify-center gap-1"><BrainCircuit size={11} />In-App</div>
-                </th>
-                <th className="text-center py-3 px-3 text-xs font-bold text-slate-500 uppercase tracking-wide">
+                {/* Col 7: Work */}
+                <th className="text-center py-3 px-3 text-xs font-bold text-slate-500 uppercase tracking-wide min-w-[100px]">
                   <div className="flex items-center justify-center gap-1"><Monitor size={11} />Work</div>
                 </th>
-                <th className="text-center py-3 px-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Overall</th>
-                <th className="py-3 px-4" />
+                {/* Col 8: In-App */}
+                <th className="text-center py-3 px-3 text-xs font-bold text-slate-500 uppercase tracking-wide min-w-[100px]">
+                  <div className="flex items-center justify-center gap-1"><BrainCircuit size={11} />In-App</div>
+                </th>
+                
+                <th className="py-3 px-3 min-w-[30px]" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {employees.map(emp => (
+              {sorted.map(emp => (
                 <tr key={emp.id} onClick={() => onSelect(emp.id)}
                   className="hover:bg-slate-50/80 cursor-pointer transition-colors group">
+
+                  {/* Col 1: Name + Avatar */}
                   <td className="py-3 px-4">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       <Avatar name={emp.name} url={emp.avatar_url} size={8} />
-                      <div>
-                        <p className="font-semibold text-slate-800 text-sm">{emp.name}</p>
-                        <p className="text-xs text-slate-400">{emp.email}</p>
-                        <p className="text-xs text-slate-400">{emp.department}</p>
-                      </div>
+                      <p className="font-semibold text-slate-800 text-sm truncate max-w-[120px]">{emp.name}</p>
                     </div>
                   </td>
-                  <td className="py-3 px-3 text-center">
-                    <div className="flex flex-col items-center gap-1">
-                      <span className="text-xs font-bold text-slate-700">{emp.signals.calendar.meeting_hours}h</span>
-                      <SignalChip signal={emp.signals.calendar.signal} />
-                    </div>
+
+                  {/* Col 2: Department */}
+                  <td className="py-3 px-3">
+                    <p className="text-xs text-slate-500 truncate max-w-[100px]">{emp.department || "—"}</p>
                   </td>
-                  <td className="py-3 px-3 text-center">
-                    <div className="flex flex-col items-center gap-1">
-                      <span className="text-xs font-bold text-slate-700">{emp.signals.gmail.sent_this_week} sent</span>
-                      <SignalChip signal={emp.signals.gmail.signal} />
-                    </div>
+
+                  {/* Col 3: Email */}
+                  <td className="py-3 px-3">
+                    <p className="text-xs text-slate-400 truncate max-w-[150px]">{emp.email}</p>
                   </td>
+
+                  {/* Col 4: Google Connected */}
                   <td className="py-3 px-3 text-center">
-                    <div className="flex flex-col items-center gap-1">
-                      <span className="text-xs font-bold text-slate-700">
-                        {emp.signals.inapp.mood_avg > 0 ? emp.signals.inapp.mood_avg.toFixed(1) : "—"} mood
+                    {emp.google_connected ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-1 text-[10px] font-bold text-emerald-700">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        Connected
                       </span>
-                      <SignalChip signal={emp.signals.inapp.mood_signal} />
-                    </div>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 border border-slate-200 px-2 py-1 text-[10px] font-bold text-slate-400">
+                        <WifiOff size={9} />
+                        None
+                      </span>
+                    )}
                   </td>
+
+                  {/* Col 5: Calendar */}
                   <td className="py-3 px-3 text-center">
-                    <div className="flex flex-col items-center gap-1">
-                      <span className="text-xs font-bold text-slate-700">{emp.signals.work_behaviour.active_minutes}m</span>
-                      <SignalChip signal={emp.signals.work_behaviour.signal} />
-                    </div>
+                    {emp.google_connected ? (
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-xs font-bold text-slate-700">{emp.signals.calendar.meeting_hours}h</span>
+                        <SignalChip signal={emp.signals.calendar.signal} />
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-300 font-medium">—</span>
+                    )}
                   </td>
+
+                  {/* Col 6: Gmail */}
                   <td className="py-3 px-3 text-center">
-                    <div className="flex flex-col items-center gap-2">
-                      <RiskBadge level={emp.risk_level} />
-                      <div className="w-16"><ScoreBar score={emp.risk_score} color={scoreColor(emp.risk_score)} /></div>
-                      <span className="text-xs text-slate-400">{emp.risk_score}/100</span>
-                    </div>
+                    {emp.google_connected ? (
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-xs font-bold text-slate-700">{emp.signals.gmail.sent_this_week} sent</span>
+                        <SignalChip signal={emp.signals.gmail.signal} />
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-300 font-medium">—</span>
+                    )}
                   </td>
-                  <td className="py-3 px-4">
-                    <ChevronRight size={16} className="text-slate-300 group-hover:text-teal-500 transition-colors ml-auto" />
+
+                  {/* Col 7: Work Behaviour */}
+                  <td className="py-3 px-3 text-center">
+                    {emp.signals.work_behaviour.active_minutes > 0 ? (
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-xs font-bold text-slate-700">{emp.signals.work_behaviour.active_minutes}m</span>
+                        <SignalChip signal={emp.signals.work_behaviour.signal} />
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-300 font-medium">—</span>
+                    )}
+                  </td>
+
+                  {/* Col 8: In-App */}
+                  <td className="py-3 px-3 text-center">
+                    {emp.signals.inapp.mood_avg > 0 ? (
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-xs font-bold text-slate-700">{emp.signals.inapp.mood_avg.toFixed(1)} mood</span>
+                        <SignalChip signal={emp.signals.inapp.mood_signal} />
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-300 font-medium">—</span>
+                    )}
+                  </td>
+
+                  
+
+                  {/* Arrow */}
+                  <td className="py-3 px-3">
+                    <ChevronRight size={15} className="text-slate-300 group-hover:text-teal-500 transition-colors" />
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        {employees.length === 0 && (
+        {sorted.length === 0 && (
           <div className="py-12 text-center text-slate-400">
             <Users size={32} className="mx-auto mb-2 opacity-40" />
             <p className="text-sm">No employee data found.</p>
@@ -354,13 +451,13 @@ function TeamOverview({ employees, onSelect, refreshing, onRefresh, lastRefreshe
 
       <p className="text-xs text-slate-400 text-center">
         Scores weighted equally: Calendar 25% · Gmail 25% · In-App 25% · Work Behaviour 25%
-        · <WifiOff size={9} className="inline" /> simulated = Google not connected
-        · Auto-refreshes every 5 seconds
+        · — = data not available · Auto-refreshes every 5 seconds
       </p>
     </div>
   );
 }
 
+// ─── Individual Deep Dive ─────────────────────────────────────────────────────
 function EmployeeDeepDive({ userId, onBack, onActionDone }: {
   userId: string; onBack: () => void; onActionDone: () => void;
 }) {
@@ -376,9 +473,9 @@ function EmployeeDeepDive({ userId, onBack, onActionDone }: {
     if (!silent) setLoading(true);
     const headers = await authHeaders();
     const url = silent
-  ? `/api/hr/wellbeing/employee/${userId}?skipAI=1`
-  : `/api/hr/wellbeing/employee/${userId}`;
-const res = await fetch(url, { headers });
+      ? `/api/hr/wellbeing/employee/${userId}?skipAI=1`
+      : `/api/hr/wellbeing/employee/${userId}`;
+    const res = await fetch(url, { headers });
     const data = await res.json();
     if (res.ok) {
       setReport(prev => ({
@@ -390,10 +487,8 @@ const res = await fetch(url, { headers });
     if (!silent) setLoading(false);
   }, [userId]);
 
-  // Initial load
   useEffect(() => { fetchReport(false); }, [fetchReport]);
 
-  // Auto refresh every 5 seconds (silent — no loading spinner)
   useEffect(() => {
     const interval = setInterval(() => { fetchReport(true); }, AUTO_REFRESH_MS);
     return () => clearInterval(interval);
@@ -421,6 +516,7 @@ const res = await fetch(url, { headers });
 
   return (
     <div className="space-y-5">
+      {/* Header */}
       <div className="flex items-start gap-4">
         <button onClick={onBack} className="mt-0.5 flex items-center gap-1.5 text-sm text-slate-500 hover:text-teal-600 transition-colors font-semibold">
           <ArrowLeft size={15} /> Back
@@ -435,7 +531,7 @@ const res = await fetch(url, { headers });
           <span className={`text-sm font-bold ${riskMeta.text}`}>{risk_score}/100</span>
           {!employee.google_connected && (
             <span className="text-xs text-slate-400 flex items-center gap-1">
-              <WifiOff size={11} /> Google not connected — Calendar & Gmail simulated
+              <WifiOff size={11} /> Google not connected
             </span>
           )}
         </div>
@@ -446,14 +542,14 @@ const res = await fetch(url, { headers });
             </span>
           )}
           <button onClick={() => fetchReport(false)}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 hover:bg-slate-50 transition-all">
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 hover:bg-slate-50">
             <RefreshCw size={12} />
           </button>
         </div>
       </div>
 
+      {/* 4 Signal Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Calendar */}
         <SignalCard title="Google Calendar" icon={<Calendar size={15} className="text-blue-500" />}
           signal={signals.calendar.signal} score={signals.calendar.score} isMock={signals.calendar.is_mock}>
           <div className="grid grid-cols-2 gap-2 text-xs">
@@ -466,14 +562,13 @@ const res = await fetch(url, { headers });
               <p className="font-extrabold text-slate-800 text-base">{Math.round(signals.calendar.focus_time_ratio * 100)}%</p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+          <div className="flex flex-wrap gap-2 text-xs">
             {signals.calendar.after_hours_meetings > 0 && <span className="text-rose-500 font-semibold">⚠ {signals.calendar.after_hours_meetings} after-hours meeting{signals.calendar.after_hours_meetings > 1 ? "s" : ""}</span>}
             {signals.calendar.back_to_back_meetings > 0 && <span className="text-amber-500 font-semibold">{signals.calendar.back_to_back_meetings} back-to-back</span>}
             {signals.calendar.after_hours_meetings === 0 && signals.calendar.back_to_back_meetings === 0 && <span className="text-emerald-600 font-semibold">✓ Healthy meeting load</span>}
           </div>
         </SignalCard>
 
-        {/* Gmail */}
         <SignalCard title="Gmail Activity" icon={<Mail size={15} className="text-red-400" />}
           signal={signals.gmail.signal} score={signals.gmail.score} isMock={signals.gmail.is_mock}>
           <div className="grid grid-cols-2 gap-2 text-xs">
@@ -486,15 +581,14 @@ const res = await fetch(url, { headers });
               <p className="font-extrabold text-slate-800 text-base">{signals.gmail.emails_sent_last_week}</p>
             </div>
           </div>
-          <div className="text-xs text-slate-500">
+          <div className="text-xs">
             {signals.gmail.after_hours_emails > 0
               ? <span className="text-rose-500 font-semibold">⚠ {signals.gmail.after_hours_emails} after-hours email{signals.gmail.after_hours_emails > 1 ? "s" : ""}</span>
               : <span className="text-emerald-600 font-semibold">✓ No after-hours emails</span>}
-            {signals.gmail.volume_delta !== 0 && <span className="ml-2">Volume {signals.gmail.volume_delta > 0 ? "+" : ""}{signals.gmail.volume_delta} vs last week</span>}
+            {signals.gmail.volume_delta !== 0 && <span className="ml-2 text-slate-500">Volume {signals.gmail.volume_delta > 0 ? "+" : ""}{signals.gmail.volume_delta} vs last week</span>}
           </div>
         </SignalCard>
 
-        {/* BrainUp In-App */}
         <SignalCard title="BrainUp In-App" icon={<BrainCircuit size={15} className="text-cyan-500" />}
           signal={signals.inapp.mood.signal} score={signals.inapp.score}>
           <div className="grid grid-cols-2 gap-2 text-xs">
@@ -535,7 +629,6 @@ const res = await fetch(url, { headers });
           </div>
         </SignalCard>
 
-        {/* Work Behaviour */}
         <SignalCard title="Work Behaviour" icon={<Monitor size={15} className="text-violet-500" />}
           signal={signals.work_behaviour.signal} score={signals.work_behaviour.score}>
           <div className="grid grid-cols-2 gap-2 text-xs">
@@ -563,7 +656,7 @@ const res = await fetch(url, { headers });
         </SignalCard>
       </div>
 
-      {/* Groq AI Narrative */}
+      {/* AI Narrative */}
       {ai_narrative ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4 shadow-sm">
           <div className="flex items-center gap-2 font-bold text-slate-700">
@@ -578,7 +671,7 @@ const res = await fetch(url, { headers });
               { label: "In-App", value: ai_narrative.inapp_insight, icon: <BrainCircuit size={11} className="text-cyan-500" /> },
               { label: "Work Behaviour", value: ai_narrative.workbehaviour_insight, icon: <Monitor size={11} className="text-violet-400" /> },
             ].map(item => (
-              <div key={item.label} className="rounded-xl bg-white/80 border border-slate-100 p-3 space-y-1">
+              <div key={item.label} className="rounded-xl bg-slate-50 border border-slate-100 p-3 space-y-1">
                 <p className="flex items-center gap-1.5 font-bold text-slate-500">{item.icon}{item.label}</p>
                 <p className="text-slate-600">{item.value}</p>
               </div>
@@ -604,27 +697,16 @@ const res = await fetch(url, { headers });
         </div>
       )}
 
+      {/* Support context */}
       {(report.support.tickets_30d > 0 || report.support.consultations_30d > 0) && (
         <div className="rounded-2xl border border-slate-200 bg-white p-4 flex items-center gap-4 text-sm">
           <Activity size={14} className="text-slate-400 shrink-0" />
           <div className="flex items-center gap-4 text-slate-600">
             {report.support.tickets_30d > 0 && <span><span className="font-bold text-slate-800">{report.support.tickets_30d}</span> support ticket{report.support.tickets_30d > 1 ? "s" : ""} (30d)</span>}
-            {report.support.consultations_30d > 0 && <span><span className="font-bold text-slate-800">{report.support.consultations_30d}</span> consultation{report.support.consultations_30d > 1 ? "s" : ""} requested (30d)</span>}
+            {report.support.consultations_30d > 0 && <span><span className="font-bold text-slate-800">{report.support.consultations_30d}</span> consultation{report.support.consultations_30d > 1 ? "s" : ""} (30d)</span>}
           </div>
         </div>
       )}
-
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-        <p className="text-sm font-bold text-slate-600 flex items-center gap-2"><UserCheck size={14} className="text-teal-500" />Take Action</p>
-        <div className="flex flex-wrap gap-2">
-          {Object.entries(ACTION_META).map(([key, meta]) => (
-            <button key={key} onClick={() => setActionModal(key)}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition-all ${meta.color}`}>
-              {meta.icon}{meta.label}
-            </button>
-          ))}
-        </div>
-      </div>
 
       
 
@@ -643,6 +725,7 @@ const res = await fetch(url, { headers });
   );
 }
 
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function WellbeingIntelligencePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -670,9 +753,8 @@ export default function WellbeingIntelligencePage() {
     return () => { alive = false; };
   }, [router]);
 
-  // Auto refresh team overview every 5 seconds
   useEffect(() => {
-    if (!isHR || selectedId) return; // only refresh when on team overview, not deep dive
+    if (!isHR || selectedId) return;
     const interval = setInterval(() => { loadTeam(); }, AUTO_REFRESH_MS);
     return () => clearInterval(interval);
   }, [isHR, selectedId]);
@@ -698,7 +780,7 @@ export default function WellbeingIntelligencePage() {
   if (!isHR) return null;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 pb-16">
+    <div className="max-w-6xl mx-auto px-4 py-6 pb-16">
       {selectedId ? (
         <EmployeeDeepDive userId={selectedId} onBack={() => setSelectedId(null)} onActionDone={() => loadTeam()} />
       ) : (

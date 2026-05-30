@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   fetchCalendarSignals, fetchGmailSignals,
-  getMockCalendarSignals, getMockGmailSignals,
 } from "@/lib/googleSignals";
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
@@ -146,10 +145,26 @@ export async function GET(
     const [cal, gmail] = await Promise.all([
       googleConnected
         ? fetchCalendarSignals(userId)
-        : Promise.resolve(getMockCalendarSignals(userId)),
+        : Promise.resolve({
+            meeting_hours_this_week: 0,
+            meeting_hours_last_week: 0,
+            after_hours_meetings: 0,
+            back_to_back_meetings: 0,
+            focus_time_ratio: 1,
+            signal: "NO_DATA" as const,
+            score: 50,
+          }),
       googleConnected
         ? fetchGmailSignals(userId)
-        : Promise.resolve(getMockGmailSignals(userId)),
+        : Promise.resolve({
+            emails_sent_this_week: 0,
+            emails_sent_last_week: 0,
+            after_hours_emails: 0,
+            avg_response_time_hours: 0,
+            volume_delta: 0,
+            signal: "NO_DATA" as const,
+            score: 50,
+          }),
     ]);
 
     // 3. BrainUp in-app signals
