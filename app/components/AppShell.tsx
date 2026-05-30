@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { getLevelFromXP } from "@/lib/gamification";
 import {
-  Bell, Brain, ChevronDown, LayoutDashboard, UserCircle2,
+  Bell, Brain, BrainCircuit, ChevronDown, LayoutDashboard, UserCircle2,
   Settings, BookOpen, ClipboardList, LibraryBig, NotebookPen,
   Trophy, LogOut, Search, BarChart3, Gift, Users, LayoutGrid,
   Sparkles, X, FileText, Megaphone, HeartHandshake, ArrowRight, LifeBuoy,
@@ -528,6 +528,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
               <SubNavLink href="/hr/consultations" icon={<Users size={14} />} label="Consultations" active={isActive("/hr/consultations")} />
               <SubNavLink href="/hr/announcements" icon={<Bell size={14} />} label="Announcements" active={isActive("/hr/announcements")} />
               <SubNavLink href="/hr/support" icon={<HeartHandshake size={14} />} label="Support" active={isActive("/hr/support")} />
+              <SubNavLink href="/hr/wellbeing-intelligence" icon={<BrainCircuit size={14} />} label="EI Insights" active={isActive("/hr/wellbeing-intelligence")} />
             </CollapseGroup>
           </>
         )}

@@ -6,16 +6,161 @@ import { supabase } from "@/lib/supabaseClient";
 import {
   Lock, Bell, Shield, Eye, EyeOff,
   CheckCircle2, ArrowLeft, Loader2, Save,
-  ChevronRight,
+  ChevronRight, Link2,
 } from "lucide-react";
 
-type Section = "password" | "notifications" | "privacy";
+type Section = "password" | "notifications" | "privacy" | "integrations";
 
+// ─── Connected Accounts Card ─────────────────────────────────────────────────
+function ConnectedAccountsCard({ userId }: { userId: string }) {
+  const [connected, setConnected] = useState(false);
+  const [connectedAt, setConnectedAt] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Check for ?google=success or ?google=error in URL
+    const params = new URLSearchParams(window.location.search);
+    const googleParam = params.get("google");
+    if (googleParam === "success") {
+      setToast("success");
+      window.history.replaceState({}, "", "/settings");
+    } else if (googleParam === "error") {
+      setToast("error");
+      window.history.replaceState({}, "", "/settings");
+    }
+  }, []);
+
+  useEffect(() => {
+    async function checkConnection() {
+      if (!userId) return;
+      const { data } = await supabase
+        .from("user_integrations")
+        .select("connected_at")
+        .eq("user_id", userId)
+        .eq("provider", "google")
+        .single();
+      if (data) {
+        setConnected(true);
+        setConnectedAt(data.connected_at);
+      }
+      setLoading(false);
+    }
+    checkConnection();
+  }, [userId]);
+
+  async function handleConnect() {
+    window.location.href = `/api/auth/google?userId=${userId}`;
+  }
+
+  async function handleDisconnect() {
+    setDisconnecting(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers: Record<string, string> = session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : {};
+    await fetch("/api/auth/google/disconnect", { method: "DELETE", headers });
+    setConnected(false);
+    setConnectedAt(null);
+    setDisconnecting(false);
+    setToast("disconnected");
+    setTimeout(() => setToast(null), 2800);
+  }
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
+      <div className="flex items-center gap-2 mb-1">
+        <Link2 size={16} className="text-cyan-500" />
+        <div className="text-sm font-extrabold text-slate-900">Connected Accounts</div>
+      </div>
+      <p className="text-xs text-slate-500 -mt-3">
+        Connect your Google account to enable Calendar and Gmail wellbeing signals in BrainUp.
+      </p>
+
+      {/* Toast messages */}
+      {toast === "success" && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-700 font-semibold flex items-center gap-2">
+          <CheckCircle2 size={14} /> Google account connected successfully
+        </div>
+      )}
+      {toast === "error" && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm text-rose-700 font-semibold">
+          ✗ Failed to connect. Please try again.
+        </div>
+      )}
+      {toast === "disconnected" && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-600 font-semibold">
+          Google account disconnected.
+        </div>
+      )}
+
+      {/* Google row */}
+      <div className="flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-white border border-slate-200 grid place-items-center shadow-sm shrink-0">
+            <svg viewBox="0 0 24 24" className="w-5 h-5">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
+          </div>
+          <div>
+            <p className="text-sm font-bold text-slate-700">Google Workspace</p>
+            <p className="text-xs text-slate-400">
+              {loading
+                ? "Checking connection..."
+                : connected && connectedAt
+                ? `Connected on ${new Date(connectedAt).toLocaleDateString("en-MY", {
+                    day: "2-digit", month: "short", year: "numeric",
+                  })}`
+                : "Calendar + Gmail access — not connected"}
+            </p>
+          </div>
+        </div>
+
+        {!loading && (
+          connected ? (
+            <button
+              type="button"
+              onClick={handleDisconnect}
+              disabled={disconnecting}
+              className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-100 transition-all disabled:opacity-50"
+            >
+              {disconnecting ? "Disconnecting..." : "Disconnect"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleConnect}
+              className="rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 px-3 py-1.5 text-xs font-bold text-white hover:opacity-90 transition-all"
+            >
+              Connect
+            </button>
+          )
+        )}
+      </div>
+
+      {/* Privacy note */}
+      <div className="rounded-xl border border-cyan-100 bg-cyan-50 px-4 py-3">
+        <p className="text-xs font-bold text-cyan-700 mb-1">🔒 Privacy note</p>
+        <p className="text-xs text-cyan-600 leading-relaxed">
+          BrainUp only reads Calendar event metadata (times, durations) and Gmail send patterns
+          (volume, timestamps). Email content is never accessed or stored.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+// ─── Main Settings Page ───────────────────────────────────────────────────────
 export default function SettingsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<Section>("password");
   const [userEmail, setUserEmail] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
 
   // Password state
   const [currentPw, setCurrentPw] = useState("");
@@ -48,10 +193,17 @@ export default function SettingsPage() {
   const [privacyMsg, setPrivacyMsg] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
   useEffect(() => {
+    // Check if redirected back from Google OAuth — auto switch to integrations tab
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("google")) setActiveSection("integrations");
+  }, []);
+
+  useEffect(() => {
     async function load() {
       const { data: { user }, error } = await supabase.auth.getUser();
       if (error || !user) { router.push("/auth"); return; }
       setUserEmail(user.email ?? "");
+      setUserId(user.id);
       setLoading(false);
     }
     load();
@@ -74,43 +226,19 @@ export default function SettingsPage() {
     if (!currentPw) { setPwMsg({ text: "Please enter your current password.", type: "error" }); return; }
     if (pwScore < 5) { setPwMsg({ text: "New password doesn't meet all requirements.", type: "error" }); return; }
     if (!pwMatch) { setPwMsg({ text: "New passwords don't match.", type: "error" }); return; }
-
     setPwSaving(true);
-
-    // Re-authenticate first
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: userEmail,
-      password: currentPw,
-    });
-
-    if (signInError) {
-      setPwMsg({ text: "Current password is incorrect.", type: "error" });
-      setPwSaving(false);
-      return;
-    }
-
-    // Update password
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email: userEmail, password: currentPw });
+    if (signInError) { setPwMsg({ text: "Current password is incorrect.", type: "error" }); setPwSaving(false); return; }
     const { error: updateError } = await supabase.auth.updateUser({ password: newPw });
-
-    if (updateError) {
-      setPwMsg({ text: "Failed to update password: " + updateError.message, type: "error" });
-      setPwSaving(false);
-      return;
-    }
-
+    if (updateError) { setPwMsg({ text: "Failed to update password: " + updateError.message, type: "error" }); setPwSaving(false); return; }
     setPwMsg({ text: "Password updated successfully! 🎉", type: "success" });
-    setCurrentPw("");
-    setNewPw("");
-    setConfirmPw("");
+    setCurrentPw(""); setNewPw(""); setConfirmPw("");
     setPwSaving(false);
     setTimeout(() => setPwMsg(null), 4000);
   }
 
   async function handleSaveNotifications() {
-    setNotifSaving(true);
-    setNotifMsg(null);
-    // In a real app, save to a user_preferences table
-    // For now, simulate save
+    setNotifSaving(true); setNotifMsg(null);
     await new Promise(r => setTimeout(r, 800));
     setNotifMsg({ text: "Notification preferences saved!", type: "success" });
     setNotifSaving(false);
@@ -118,8 +246,7 @@ export default function SettingsPage() {
   }
 
   async function handleSavePrivacy() {
-    setPrivacySaving(true);
-    setPrivacyMsg(null);
+    setPrivacySaving(true); setPrivacyMsg(null);
     await new Promise(r => setTimeout(r, 800));
     setPrivacyMsg({ text: "Privacy settings saved!", type: "success" });
     setPrivacySaving(false);
@@ -135,9 +262,10 @@ export default function SettingsPage() {
   }
 
   const SECTIONS: { key: Section; label: string; icon: React.ReactNode; desc: string }[] = [
-    { key: "password", label: "Change Password", icon: <Lock size={16} />, desc: "Update your account password" },
-    { key: "notifications", label: "Notifications", icon: <Bell size={16} />, desc: "Manage your notification preferences" },
-    { key: "privacy", label: "Privacy & Data", icon: <Shield size={16} />, desc: "Control your data and visibility" },
+    { key: "password",     label: "Change Password", icon: <Lock size={16} />,   desc: "Update your account password" },
+    { key: "notifications",label: "Notifications",   icon: <Bell size={16} />,   desc: "Manage notification preferences" },
+    { key: "privacy",      label: "Privacy & Data",  icon: <Shield size={16} />, desc: "Control your data and visibility" },
+    { key: "integrations", label: "Integrations",    icon: <Link2 size={16} />,  desc: "Connect external accounts" },
   ];
 
   return (
@@ -212,17 +340,12 @@ export default function SettingsPage() {
               )}
 
               <div className="space-y-4">
-                {/* Current password */}
                 <div>
                   <label className="text-xs font-bold text-slate-500 block mb-1.5">Current Password</label>
                   <div className="relative">
-                    <input
-                      type={showCurrentPw ? "text" : "password"}
-                      value={currentPw}
-                      onChange={e => setCurrentPw(e.target.value)}
-                      placeholder="Enter current password"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 pr-10 text-sm outline-none focus:ring-2 focus:ring-cyan-300 focus:bg-white transition"
-                    />
+                    <input type={showCurrentPw ? "text" : "password"} value={currentPw}
+                      onChange={e => setCurrentPw(e.target.value)} placeholder="Enter current password"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 pr-10 text-sm outline-none focus:ring-2 focus:ring-cyan-300 focus:bg-white transition" />
                     <button type="button" onClick={() => setShowCurrentPw(v => !v)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                       {showCurrentPw ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -230,24 +353,17 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                {/* New password */}
                 <div>
                   <label className="text-xs font-bold text-slate-500 block mb-1.5">New Password</label>
                   <div className="relative">
-                    <input
-                      type={showNewPw ? "text" : "password"}
-                      value={newPw}
-                      onChange={e => setNewPw(e.target.value)}
-                      placeholder="Enter new password"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 pr-10 text-sm outline-none focus:ring-2 focus:ring-cyan-300 focus:bg-white transition"
-                    />
+                    <input type={showNewPw ? "text" : "password"} value={newPw}
+                      onChange={e => setNewPw(e.target.value)} placeholder="Enter new password"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 pr-10 text-sm outline-none focus:ring-2 focus:ring-cyan-300 focus:bg-white transition" />
                     <button type="button" onClick={() => setShowNewPw(v => !v)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                       {showNewPw ? <EyeOff size={15} /> : <Eye size={15} />}
                     </button>
                   </div>
-
-                  {/* Password strength */}
                   {newPw && (
                     <div className="mt-2">
                       <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
@@ -264,8 +380,7 @@ export default function SettingsPage() {
                         ].map(r => (
                           <div key={r.text} className="flex items-center gap-1.5 text-[11px]"
                             style={{ color: r.ok ? "#059669" : "#94a3b8" }}>
-                            <CheckCircle2 size={10} />
-                            {r.text}
+                            <CheckCircle2 size={10} />{r.text}
                           </div>
                         ))}
                       </div>
@@ -273,15 +388,11 @@ export default function SettingsPage() {
                   )}
                 </div>
 
-                {/* Confirm password */}
                 <div>
                   <label className="text-xs font-bold text-slate-500 block mb-1.5">Confirm New Password</label>
                   <div className="relative">
-                    <input
-                      type={showConfirmPw ? "text" : "password"}
-                      value={confirmPw}
-                      onChange={e => setConfirmPw(e.target.value)}
-                      placeholder="Confirm new password"
+                    <input type={showConfirmPw ? "text" : "password"} value={confirmPw}
+                      onChange={e => setConfirmPw(e.target.value)} placeholder="Confirm new password"
                       className={[
                         "w-full rounded-xl border px-3 py-2.5 pr-10 text-sm outline-none transition",
                         confirmPw
@@ -289,21 +400,14 @@ export default function SettingsPage() {
                             ? "border-emerald-300 bg-emerald-50 focus:ring-2 focus:ring-emerald-300"
                             : "border-rose-300 bg-rose-50 focus:ring-2 focus:ring-rose-300"
                           : "border-slate-200 bg-slate-50 focus:ring-2 focus:ring-cyan-300 focus:bg-white",
-                      ].join(" ")}
-                    />
+                      ].join(" ")} />
                     <button type="button" onClick={() => setShowConfirmPw(v => !v)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                       {showConfirmPw ? <EyeOff size={15} /> : <Eye size={15} />}
                     </button>
                   </div>
-                  {confirmPw && !pwMatch && (
-                    <p className="mt-1 text-[11px] font-semibold text-rose-500">Passwords don't match</p>
-                  )}
-                  {pwMatch && (
-                    <p className="mt-1 text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
-                      <CheckCircle2 size={10} /> Passwords match
-                    </p>
-                  )}
+                  {confirmPw && !pwMatch && <p className="mt-1 text-[11px] font-semibold text-rose-500">Passwords don't match</p>}
+                  {pwMatch && <p className="mt-1 text-[11px] font-semibold text-emerald-600 flex items-center gap-1"><CheckCircle2 size={10} /> Passwords match</p>}
                 </div>
               </div>
 
@@ -322,9 +426,7 @@ export default function SettingsPage() {
                 <Bell size={16} className="text-cyan-500" />
                 <div className="text-sm font-extrabold text-slate-900">Notification Preferences</div>
               </div>
-              <p className="text-xs text-slate-500 mb-5">
-                Choose which notifications you'd like to receive.
-              </p>
+              <p className="text-xs text-slate-500 mb-5">Choose which notifications you'd like to receive.</p>
 
               {notifMsg && (
                 <div className={[
@@ -352,17 +454,12 @@ export default function SettingsPage() {
                       <div className="text-sm font-extrabold text-slate-900">{item.label}</div>
                       <div className="text-xs text-slate-500 mt-0.5">{item.desc}</div>
                     </div>
-                    <button
-                      type="button"
+                    <button type="button"
                       onClick={() => setNotifSettings(p => ({ ...p, [item.key]: !p[item.key] }))}
-                      className={[
-                        "relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                        notifSettings[item.key] ? "bg-cyan-500" : "bg-slate-200",
-                      ].join(" ")}>
-                      <span className={[
-                        "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                        notifSettings[item.key] ? "translate-x-5" : "translate-x-0",
-                      ].join(" ")} />
+                      className={["relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                        notifSettings[item.key] ? "bg-cyan-500" : "bg-slate-200"].join(" ")}>
+                      <span className={["pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                        notifSettings[item.key] ? "translate-x-5" : "translate-x-0"].join(" ")} />
                     </button>
                   </div>
                 ))}
@@ -383,9 +480,7 @@ export default function SettingsPage() {
                 <Shield size={16} className="text-cyan-500" />
                 <div className="text-sm font-extrabold text-slate-900">Privacy & Data</div>
               </div>
-              <p className="text-xs text-slate-500 mb-5">
-                Control what data is shared and who can see your information.
-              </p>
+              <p className="text-xs text-slate-500 mb-5">Control what data is shared and who can see your information.</p>
 
               {privacyMsg && (
                 <div className={[
@@ -411,23 +506,17 @@ export default function SettingsPage() {
                       <div className="text-sm font-extrabold text-slate-900">{item.label}</div>
                       <div className="text-xs text-slate-500 mt-0.5">{item.desc}</div>
                     </div>
-                    <button
-                      type="button"
+                    <button type="button"
                       onClick={() => setPrivacySettings(p => ({ ...p, [item.key]: !p[item.key] }))}
-                      className={[
-                        "relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
-                        privacySettings[item.key] ? "bg-cyan-500" : "bg-slate-200",
-                      ].join(" ")}>
-                      <span className={[
-                        "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                        privacySettings[item.key] ? "translate-x-5" : "translate-x-0",
-                      ].join(" ")} />
+                      className={["relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                        privacySettings[item.key] ? "bg-cyan-500" : "bg-slate-200"].join(" ")}>
+                      <span className={["pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                        privacySettings[item.key] ? "translate-x-5" : "translate-x-0"].join(" ")} />
                     </button>
                   </div>
                 ))}
               </div>
 
-              {/* Data info */}
               <div className="mt-4 rounded-xl border border-cyan-100 bg-cyan-50 px-4 py-3">
                 <div className="text-xs font-bold text-cyan-700 mb-1">About your data</div>
                 <div className="text-xs text-cyan-600 leading-relaxed">
@@ -441,6 +530,11 @@ export default function SettingsPage() {
                 {privacySaving ? <><Loader2 size={14} className="animate-spin" /> Saving...</> : <><Save size={14} /> Save Settings</>}
               </button>
             </section>
+          )}
+
+          {/* ── INTEGRATIONS ── */}
+          {activeSection === "integrations" && (
+            <ConnectedAccountsCard userId={userId ?? ""} />
           )}
 
         </div>
