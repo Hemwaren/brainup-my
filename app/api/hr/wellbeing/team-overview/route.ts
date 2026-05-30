@@ -255,8 +255,8 @@ const emailMap = Object.fromEntries(
         } else {
           return {
             userId: emp.id,
-            cal: getMockCalendarSignals(emp.id),
-            gmail: getMockGmailSignals(emp.id),
+            cal: { meeting_hours_this_week: 0, meeting_hours_last_week: 0, after_hours_meetings: 0, back_to_back_meetings: 0, focus_time_ratio: 1, signal: "NO_DATA" as const, score: 50 },
+    gmail: { emails_sent_this_week: 0, emails_sent_last_week: 0, after_hours_emails: 0, avg_response_time_hours: 0, volume_delta: 0, signal: "NO_DATA" as const, score: 50 },
           };
         }
       })
