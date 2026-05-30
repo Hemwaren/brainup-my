@@ -266,23 +266,6 @@ function TeamOverview({ employees, onSelect, refreshing, onRefresh, lastRefreshe
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { label: "Thriving",        count: totals.thriving,  bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-700", dot: "bg-emerald-500" },
-          { label: "Monitor",         count: totals.monitor,   bg: "bg-amber-50",   border: "border-amber-200",   text: "text-amber-700",   dot: "bg-amber-500" },
-          { label: "Needs Attention", count: totals.attention, bg: "bg-orange-50",  border: "border-orange-200",  text: "text-orange-700",  dot: "bg-orange-500" },
-          { label: "Critical",        count: totals.critical,  bg: "bg-rose-50",    border: "border-rose-200",    text: "text-rose-700",    dot: "bg-rose-500" },
-        ].map(s => (
-          <div key={s.label} className={`rounded-2xl border p-4 ${s.bg} ${s.border}`}>
-            <div className="flex items-center gap-2 mb-1">
-              <span className={`w-2 h-2 rounded-full ${s.dot}`} />
-              <span className={`text-xs font-bold ${s.text}`}>{s.label}</span>
-            </div>
-            <p className={`text-3xl font-extrabold ${s.text}`}>{s.count}</p>
-            <p className="text-xs text-slate-500 mt-0.5">employees</p>
-          </div>
-        ))}
-      </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
@@ -643,23 +626,7 @@ const res = await fetch(url, { headers });
         </div>
       </div>
 
-      {hr_actions.length > 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-          <p className="text-sm font-bold text-slate-600 flex items-center gap-2"><ClipboardList size={14} className="text-slate-400" />HR Action History</p>
-          <div className="space-y-2">
-            {hr_actions.map((a, i) => (
-              <div key={i} className="flex items-start gap-3 text-sm">
-                <div className="w-2 h-2 rounded-full bg-teal-400 mt-1.5 shrink-0" />
-                <div className="flex-1">
-                  <p className="font-semibold text-slate-700">{ACTION_LABELS[a.action_type] ?? a.action_type}</p>
-                  {a.notes && <p className="text-slate-500 text-xs mt-0.5">{a.notes}</p>}
-                </div>
-                <span className="text-xs text-slate-400 shrink-0">{fmtDate(a.created_at)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      
 
       {actionModal && (
         <ActionModal open={true} actionType={actionModal} employeeId={userId}
