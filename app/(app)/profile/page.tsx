@@ -139,7 +139,12 @@ export default function ProfilePage() {
       const publicUrl = urlData?.publicUrl ? `${urlData.publicUrl}?t=${Date.now()}` : null;
       await supabase.from("profiles").update({ avatar_url: urlData?.publicUrl ?? null }).eq("id", profile.id);
       setProfile(prev => prev ? { ...prev, avatar_url: publicUrl } : prev);
-      setMsg({ text: "Profile photo updated!", type: "success" });
+      if (publicUrl) {
+        localStorage.setItem("brainup_avatar", publicUrl);
+        window.dispatchEvent(new CustomEvent("brainup_avatar_updated", { detail: publicUrl }));
+      }
+      setMsg({ text: "Profile photo updated! ✅", type: "success" });
+      setTimeout(() => setMsg(null), 3000);
     } catch {
       setMsg({ text: "Something went wrong.", type: "error" });
     }
@@ -179,7 +184,7 @@ export default function ProfilePage() {
 
     setMsg({ text: "Profile saved successfully! ✅", type: "success" });
     setSaving(false);
-    setTimeout(() => setMsg(null), 3000);
+    setTimeout(() => router.push("/post-login"), 1500);
   }
 
   if (loading || !profile) {
@@ -279,7 +284,7 @@ export default function ProfilePage() {
             <div className="relative mb-4">
               <div className="h-28 w-28 rounded-2xl border-2 border-slate-200 overflow-hidden bg-gradient-to-br from-teal-400 to-cyan-400">
                 {profile.avatar_url
-                  ? <img src={profile.avatar_url} alt="Avatar" className="h-full w-full object-cover" />
+                  ? <img src={`${profile.avatar_url}?t=${Date.now()}`} alt="Avatar" className="h-full w-full object-cover" />
                   : <div className="h-full w-full flex items-center justify-center text-white text-4xl font-extrabold">
                       {displayName.charAt(0).toUpperCase()}
                     </div>

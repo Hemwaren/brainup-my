@@ -336,6 +336,52 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
 
+  // Listen for avatar updates from profile page
+  useEffect(() => {
+    function handleStorage(e: StorageEvent) {
+      if (e.key === "brainup_avatar" && e.newValue) {
+        setProfile(prev => prev ? { ...prev, avatar_url: e.newValue } : prev);
+      }
+    }
+    function handleAvatarUpdate(e: Event) {
+      const url = (e as CustomEvent).detail;
+      if (url) setProfile(prev => prev ? { ...prev, avatar_url: url } : prev);
+    }
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener("brainup_avatar_updated", handleAvatarUpdate);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("brainup_avatar_updated", handleAvatarUpdate);
+    };
+  }, []);
+
+// Re-fetch profile when it changes in Supabase (e.g. avatar update)
+  useEffect(() => {
+    let userId: string | null = null;
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      userId = user.id;
+      const ch = supabase.channel(`profile:${userId}`)
+        .on("postgres_changes",
+          { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${userId}` },
+          async () => {
+            const { data: p } = await supabase
+              .from("profiles")
+              .select("full_name, role, department, joined_at, avatar_url")
+              .eq("id", userId!)
+              .maybeSingle();
+            if (p) {
+              setProfile(prev => prev ? {
+                ...prev,
+                avatar_url: p.avatar_url ? `${p.avatar_url}?t=${Date.now()}` : null,
+                full_name: p.full_name ?? prev.full_name,
+              } : prev);
+            }
+          })
+        .subscribe();
+      return () => { supabase.removeChannel(ch); };
+    });
+  }, []);
   // Realtime notifications
   useEffect(() => {
     let userId: string | null = null;
@@ -436,7 +482,9 @@ function AppShell({ children }: { children: React.ReactNode }) {
       const department = String(role).toUpperCase() === "HR" ? "Human Resources" : deptRaw || "—";
       const joined_at = (dbProfile?.joined_at ?? md?.joined_at ?? u.created_at ?? new Date().toISOString()) as string;
       const full_name = (dbProfile?.full_name ?? md?.full_name ?? md?.name ?? "User") as string;
-      const avatar_url = (dbProfile?.avatar_url ?? md?.avatar_url ?? null) as string | null;
+      const dbAvatar = (dbProfile?.avatar_url ?? md?.avatar_url ?? null) as string | null;
+      const cachedAvatar = localStorage.getItem("brainup_avatar");
+      const avatar_url = cachedAvatar ?? dbAvatar;
 
       setProfile({ full_name, email: u.email ?? "", role, department, joined_at, avatar_url });
       setLoading(false);
@@ -447,7 +495,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
   const roleLabel = useMemo(() => {
     const r = String(profile?.role || "EMPLOYEE").toUpperCase();
-    if (r === "HR") return "HR Manager";
+    if (r === "HR") return "Human Resource (HR)";
     if (r === "ADMIN") return "Admin";
     return "Employee";
   }, [profile?.role]);
@@ -543,9 +591,13 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="mx-3 mb-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
         <div className="flex items-center gap-3">
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white text-xs font-extrabold">
-            {profile.full_name.charAt(0).toUpperCase()}
-          </div>
+          {profile.avatar_url ? (
+            <img src={`${profile.avatar_url}?t=${Date.now()}`} alt="avatar" className="h-9 w-9 rounded-xl object-cover shrink-0" />
+          ) : (
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white text-xs font-extrabold">
+              {profile.full_name.charAt(0).toUpperCase()}
+            </div>
+          )}
           <div className="min-w-0 flex-1">
             <div className="truncate text-xs font-extrabold text-slate-900">{profile.full_name}</div>
             <div className="text-[10px] text-slate-500">{roleLabel}</div>
@@ -744,9 +796,13 @@ function AppShell({ children }: { children: React.ReactNode }) {
                 <button type="button"
                   className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 hover:bg-slate-50 transition"
                   onClick={() => router.push("/profile")}>
-                  <div className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white text-xs font-extrabold">
-                    {profile.full_name.charAt(0).toUpperCase()}
-                  </div>
+                  {profile.avatar_url ? (
+                    <img src={`${profile.avatar_url}?t=${Date.now()}`} alt="avatar" className="h-7 w-7 rounded-lg object-cover" />
+                  ) : (
+                    <div className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white text-xs font-extrabold">
+                      {profile.full_name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
                   <div className="hidden sm:block text-left leading-tight">
                     <div className="text-xs font-extrabold text-slate-900">{profile.full_name}</div>
                     <div className="text-[10px] text-slate-500">{roleLabel}</div>

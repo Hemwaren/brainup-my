@@ -173,7 +173,7 @@ export default function PostLoginPage() {
           role,
           department,
           created_at: dbProfile?.created_at ?? u.created_at ?? null,
-          avatar_url: dbProfile?.avatar_url ?? null,
+          avatar_url: localStorage.getItem("brainup_avatar") ?? dbProfile?.avatar_url ?? null,
           level: Number(gamRow?.level ?? 1),
           total_xp: Number(gamRow?.total_xp ?? 0),
           days_streak: Number(gamRow?.current_streak ?? 0),
@@ -221,7 +221,7 @@ export default function PostLoginPage() {
 
   const roleLabel = useMemo(() => {
     const r = String(profile?.role || "EMPLOYEE").toUpperCase();
-    if (r === "HR") return "HR Manager";
+    if (r === "HR") return "Human Resource (HR)";
     if (r === "ADMIN") return "Admin";
     return "Employee";
   }, [profile?.role]);

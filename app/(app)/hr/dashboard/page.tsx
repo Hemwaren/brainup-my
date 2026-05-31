@@ -169,21 +169,25 @@ export default function HRDashboardPage() {
       return d.toISOString().slice(0, 10);
     })();
 
+    // Fetch all profiles to get department mapping
+    const { data: profilesData } = await supabase
+      .from("profiles")
+      .select("id, department");
+    const deptMap = new Map((profilesData ?? []).map(p => [p.id, p.department ?? "Unknown"]));
+
     // Current period
-    let q = supabase
+    const { data: cur } = await supabase
       .from("emotion_checkins")
       .select("*")
       .gte("checked_in_at", startDate + "T00:00:00Z")
       .lte("checked_in_at", endDate + "T23:59:59Z");
-    if (selectedDept !== "All") q = q.eq("department", selectedDept);
 
-    // Previous period (same length, immediately before)
-    let qPrev = supabase
+    // Previous period
+    const { data: prev } = await supabase
       .from("emotion_checkins")
       .select("*")
       .gte("checked_in_at", prevStart + "T00:00:00Z")
       .lte("checked_in_at", prevEnd + "T23:59:59Z");
-    if (selectedDept !== "All") qPrev = qPrev.eq("department", selectedDept);
 
     // Active employees count
     let qEmp = supabase
@@ -191,11 +195,18 @@ export default function HRDashboardPage() {
       .select("id", { count: "exact", head: true })
       .in("role", ["EMPLOYEE", "HR"]);
     if (selectedDept !== "All") qEmp = qEmp.eq("department", selectedDept);
+    const { count: empCount } = await qEmp;
 
-    const [{ data: cur }, { data: prev }, { count: empCount }] = await Promise.all([q, qPrev, qEmp]);
+    // Inject department into checkins
+    const enriched = (cur ?? []).map(c => ({ ...c, department: deptMap.get(c.user_id) ?? "Unknown" }));
+    const enrichedPrev = (prev ?? []).map(c => ({ ...c, department: deptMap.get(c.user_id) ?? "Unknown" }));
 
-    setCheckins(cur ?? []);
-    setPrevPeriodCheckins(prev ?? []);
+    // Filter by dept if selected
+    const filtered = selectedDept === "All" ? enriched : enriched.filter(c => c.department === selectedDept);
+    const filteredPrev = selectedDept === "All" ? enrichedPrev : enrichedPrev.filter(c => c.department === selectedDept);
+
+    setCheckins(filtered);
+    setPrevPeriodCheckins(filteredPrev);
     setTotalEmployees(empCount ?? 0);
     setRefreshing(false);
   }, [startDate, endDate, selectedDept]);
