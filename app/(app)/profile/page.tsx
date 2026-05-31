@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import Cropper from "react-easy-crop";
 import {
-  Camera, Loader2, Save, X, CheckCircle2,
-  ArrowLeft,
+  Camera, Loader2, Save, X, CheckCircle2, ArrowLeft,
 } from "lucide-react";
 
 type CropArea = { x: number; y: number; width: number; height: number };
@@ -192,10 +191,14 @@ export default function ProfilePage() {
   }
 
   const displayName = profile.nickname || profile.full_name;
-  const roleLabel = profile.role === "HR" ? "HR Manager" : profile.role === "ADMIN" ? "Admin" : "Employee";
+  const roleLabel = profile.role === "HR"
+    ? "Human Resource (HR)"
+    : profile.role === "ADMIN"
+    ? "Admin"
+    : "Employee";
 
   return (
-    <div className="space-y-5 max-w-2xl">
+    <div className="space-y-5 max-w-4xl mx-auto">
 
       {/* Image Crop Modal */}
       {cropSrc && (
@@ -264,161 +267,206 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* Avatar section */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="text-sm font-extrabold text-slate-900 mb-4">Profile Photo</div>
-        <div className="flex items-center gap-5">
-          <div className="relative shrink-0">
-            <div className="h-24 w-24 rounded-2xl border-2 border-slate-200 overflow-hidden bg-gradient-to-br from-teal-400 to-cyan-400">
-              {profile.avatar_url
-                ? <img src={profile.avatar_url} alt="Avatar" className="h-full w-full object-cover" />
-                : <div className="h-full w-full flex items-center justify-center text-white text-3xl font-extrabold">
-                    {displayName.charAt(0).toUpperCase()}
-                  </div>
-              }
+      {/* 2-column layout — equal height cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5" style={{ alignItems: "stretch" }}>
+
+        {/* Left column */}
+        <div className="flex flex-col gap-4">
+
+          {/* Avatar card — fully centered */}
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col items-center text-center">
+            <div className="text-sm font-extrabold text-slate-900 mb-4 w-full text-left">Profile Photo</div>
+            <div className="relative mb-4">
+              <div className="h-28 w-28 rounded-2xl border-2 border-slate-200 overflow-hidden bg-gradient-to-br from-teal-400 to-cyan-400">
+                {profile.avatar_url
+                  ? <img src={profile.avatar_url} alt="Avatar" className="h-full w-full object-cover" />
+                  : <div className="h-full w-full flex items-center justify-center text-white text-4xl font-extrabold">
+                      {displayName.charAt(0).toUpperCase()}
+                    </div>
+                }
+              </div>
+              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploadingAvatar}
+                className="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full bg-slate-900 text-white border-2 border-white hover:bg-slate-700 transition disabled:opacity-50">
+                {uploadingAvatar ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />}
+              </button>
+            </div>
+            <div className="mb-4">
+              <div className="text-base font-extrabold text-slate-900">{displayName}</div>
+              <div className="text-xs text-slate-500 mt-0.5">{roleLabel}</div>
+              <div className="text-xs text-slate-400">{form.department || "—"}</div>
             </div>
             <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploadingAvatar}
-              className="absolute -bottom-1 -right-1 grid h-8 w-8 place-items-center rounded-full bg-slate-900 text-white border-2 border-white hover:bg-slate-700 transition disabled:opacity-50">
-              {uploadingAvatar ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />}
-            </button>
-          </div>
-          <div>
-            <div className="text-sm font-extrabold text-slate-900">{displayName}</div>
-            <div className="text-xs text-slate-500 mt-0.5">{roleLabel} · {profile.department || "—"}</div>
-            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploadingAvatar}
-              className="mt-2 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-700 hover:bg-slate-50 transition">
+              className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-extrabold text-slate-700 hover:bg-slate-50 transition">
               <Camera size={12} /> Change photo
             </button>
-          </div>
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+          </section>
+
+          {/* Account info card — flex-1 to fill remaining height */}
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm flex-1 flex flex-col">
+            <div className="text-sm font-extrabold text-slate-900 mb-4">Account Info</div>
+            <div className="space-y-0 flex-1">
+              {[
+                { label: "Email", value: profile.email },
+                { label: "Role", value: roleLabel },
+                { label: "Department", value: form.department || "—" },
+                { label: "Gender", value: form.gender || "—" },
+                { label: "Age", value: form.age || "—" },
+                { label: "One Word", value: form.one_word_self || "—" },
+              ].map((item, idx, arr) => (
+                <div key={item.label}
+                  className={`flex items-center justify-between py-2.5 ${idx < arr.length - 1 ? "border-b border-slate-50" : ""}`}>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide shrink-0">{item.label}</p>
+                  <p className="text-xs text-slate-700 font-semibold truncate max-w-[55%] text-right">{item.value}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Connected accounts */}
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2">Connected Accounts</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                  </svg>
+                  <span className="text-xs text-slate-600 font-semibold">Google Workspace</span>
+                </div>
+                <a href="/settings" className="text-[10px] font-bold text-cyan-600 hover:underline">Manage →</a>
+              </div>
+            </div>
+          </section>
         </div>
-        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-      </section>
 
-      {/* Personal info */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="text-sm font-extrabold text-slate-900 mb-5">Personal Information</div>
-        <div className="space-y-4">
+        {/* Right column — Form spans 2 cols */}
+        <section className="md:col-span-2 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col">
+          <div className="text-sm font-extrabold text-slate-900 mb-5">Personal Information</div>
+          <div className="space-y-4 flex-1">
 
-          {/* Full name + Nickname */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="text-xs font-bold text-slate-500 block mb-1.5">
-                Full Name <span className="text-rose-500">*</span>
-              </label>
-              <input
-                value={form.full_name}
-                onChange={e => setForm(p => ({ ...p, full_name: e.target.value }))}
-                placeholder="Your full name"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300 focus:bg-white transition"
-              />
+            {/* Full name + Nickname */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="text-xs font-bold text-slate-500 block mb-1.5">
+                  Full Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  value={form.full_name}
+                  onChange={e => setForm(p => ({ ...p, full_name: e.target.value }))}
+                  placeholder="Your full name"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300 focus:bg-white transition"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 block mb-1.5">
+                  Nickname / Preferred Name
+                </label>
+                <input
+                  value={form.nickname}
+                  onChange={e => setForm(p => ({ ...p, nickname: e.target.value }))}
+                  placeholder="e.g. Alex, Kak Ani"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300 focus:bg-white transition"
+                />
+              </div>
             </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 block mb-1.5">
-                Nickname / Preferred Name
-              </label>
-              <input
-                value={form.nickname}
-                onChange={e => setForm(p => ({ ...p, nickname: e.target.value }))}
-                placeholder="e.g. Alex, Kak Ani"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300 focus:bg-white transition"
-              />
-            </div>
-          </div>
 
-          {/* Email */}
-          <div>
-            <label className="text-xs font-bold text-slate-500 block mb-1.5">Email</label>
-            <input
-              value={profile.email}
-              disabled
-              className="w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2.5 text-sm text-slate-400 cursor-not-allowed"
-            />
-            <p className="mt-1 text-[10px] text-slate-400">Email cannot be changed here. Contact admin.</p>
-          </div>
-
-          {/* Role + Department */}
-          <div className="grid gap-4 md:grid-cols-2">
+            {/* Email */}
             <div>
-              <label className="text-xs font-bold text-slate-500 block mb-1.5">Role</label>
+              <label className="text-xs font-bold text-slate-500 block mb-1.5">Email</label>
               <input
-                value={roleLabel}
+                value={profile.email}
                 disabled
                 className="w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2.5 text-sm text-slate-400 cursor-not-allowed"
               />
+              <p className="mt-1 text-[10px] text-slate-400">Email cannot be changed here. Contact admin.</p>
             </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 block mb-1.5">Department</label>
-              <select
-                value={form.department}
-                onChange={e => setForm(p => ({ ...p, department: e.target.value }))}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300 focus:bg-white transition">
-                <option value="">Select department</option>
-                {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-            </div>
-          </div>
 
-          {/* Age + Gender */}
-          <div className="grid gap-4 md:grid-cols-2">
+            {/* Role + Department */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="text-xs font-bold text-slate-500 block mb-1.5">Role</label>
+                <input
+                  value={roleLabel}
+                  disabled
+                  className="w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2.5 text-sm text-slate-400 cursor-not-allowed"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 block mb-1.5">Department</label>
+                <select
+                  value={form.department}
+                  onChange={e => setForm(p => ({ ...p, department: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300 focus:bg-white transition">
+                  <option value="">Select department</option>
+                  {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Age + Gender */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="text-xs font-bold text-slate-500 block mb-1.5">Age</label>
+                <input
+                  type="number" min={16} max={80}
+                  value={form.age}
+                  onChange={e => setForm(p => ({ ...p, age: e.target.value }))}
+                  placeholder="Your age"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300 focus:bg-white transition"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 block mb-1.5">Gender</label>
+                <div className="flex gap-2">
+                  {GENDERS.map(g => (
+                    <button key={g} type="button" onClick={() => setForm(p => ({ ...p, gender: g }))}
+                      className={[
+                        "flex-1 rounded-xl border px-2 py-2.5 text-xs font-bold transition",
+                        form.gender === g
+                          ? "border-cyan-400 bg-cyan-50 text-cyan-700"
+                          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+                      ].join(" ")}>
+                      {g === "Prefer not to say" ? "Prefer not" : g}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* One word */}
             <div>
-              <label className="text-xs font-bold text-slate-500 block mb-1.5">Age</label>
+              <label className="text-xs font-bold text-slate-500 block mb-1.5">
+                One word to describe yourself
+              </label>
               <input
-                type="number"
-                min={16} max={80}
-                value={form.age}
-                onChange={e => setForm(p => ({ ...p, age: e.target.value }))}
-                placeholder="Your age"
+                value={form.one_word_self}
+                onChange={e => setForm(p => ({ ...p, one_word_self: e.target.value.split(" ")[0] }))}
+                placeholder="e.g. Curious, Resilient, Creative"
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300 focus:bg-white transition"
               />
             </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 block mb-1.5">Gender</label>
-              <div className="flex gap-2">
-                {GENDERS.map(g => (
-                  <button key={g} type="button" onClick={() => setForm(p => ({ ...p, gender: g }))}
-                    className={[
-                      "flex-1 rounded-xl border px-2 py-2.5 text-xs font-bold transition",
-                      form.gender === g
-                        ? "border-cyan-400 bg-cyan-50 text-cyan-700"
-                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
-                    ].join(" ")}>
-                    {g === "Prefer not to say" ? "Prefer not" : g}
-                  </button>
-                ))}
-              </div>
-            </div>
+
           </div>
 
-          {/* One word */}
-          <div>
-            <label className="text-xs font-bold text-slate-500 block mb-1.5">
-              One word to describe yourself
-            </label>
-            <input
-              value={form.one_word_self}
-              onChange={e => setForm(p => ({ ...p, one_word_self: e.target.value.split(" ")[0] }))}
-              placeholder="e.g. Curious, Resilient, Creative"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-300 focus:bg-white transition"
-            />
+          {/* Actions pinned to bottom */}
+          <div className="mt-6 pt-5 border-t border-slate-100 flex gap-3">
+            <button type="button" onClick={handleSave} disabled={saving}
+              className="inline-flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-extrabold text-white hover:opacity-95 disabled:opacity-50 transition"
+              style={{ background: "linear-gradient(135deg,#14b8a6,#22d3ee,#38bdf8)" }}>
+              {saving
+                ? <><Loader2 size={14} className="animate-spin" /> Saving...</>
+                : <><Save size={14} /> Save Changes</>
+              }
+            </button>
+            <button type="button" onClick={() => router.push("/post-login")}
+              className="rounded-xl border border-slate-200 bg-white px-6 py-2.5 text-sm font-extrabold text-slate-700 hover:bg-slate-50 transition">
+              Cancel
+            </button>
           </div>
-        </div>
-
-        {/* Actions */}
-        <div className="mt-6 flex gap-3">
-          <button type="button" onClick={handleSave} disabled={saving}
-            className="inline-flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-extrabold text-white hover:opacity-95 disabled:opacity-50 transition"
-            style={{ background: "linear-gradient(135deg,#14b8a6,#22d3ee,#38bdf8)" }}>
-            {saving
-              ? <><Loader2 size={14} className="animate-spin" /> Saving...</>
-              : <><Save size={14} /> Save Changes</>
-            }
-          </button>
-          <button type="button" onClick={() => router.push("/post-login")}
-            className="rounded-xl border border-slate-200 bg-white px-6 py-2.5 text-sm font-extrabold text-slate-700 hover:bg-slate-50 transition">
-            Cancel
-          </button>
-        </div>
-      </section>
+        </section>
+      </div>
     </div>
   );
 }

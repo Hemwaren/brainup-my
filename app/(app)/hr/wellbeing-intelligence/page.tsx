@@ -8,7 +8,7 @@ import {
   TrendingUp, TrendingDown, Minus, AlertTriangle, CheckCircle2,
   CalendarCheck, Sparkles, MessageSquare, UserCheck, Send,
   ClipboardList, X, ArrowLeft, Activity, Target, Mail, Calendar,
-  Monitor, WifiOff, ChevronDown, ArrowUpDown,
+  Monitor, WifiOff, ChevronDown, ArrowUpDown, Info,
 } from "lucide-react";
 
 type RiskLevel = "THRIVING" | "MONITOR" | "NEEDS ATTENTION" | "CRITICAL";
@@ -266,6 +266,144 @@ function SortDropdown({ value, onChange }: { value: SortKey; onChange: (v: SortK
   );
 }
 
+function SignalLegend() {
+  const [open, setOpen] = useState(false);
+
+  const sections = [
+    {
+      title: "Google Calendar",
+      icon: <Calendar size={13} className="text-blue-500" />,
+      rows: [
+        { signal: "BALANCED", color: "bg-emerald-100 text-emerald-700", meaning: "Healthy meeting load", range: "< 15h meetings, no after-hours" },
+        { signal: "MODERATE", color: "bg-amber-100 text-amber-700",   meaning: "Some overload signs",  range: "15–30h meetings or 1 after-hours" },
+        { signal: "OVERLOADED", color: "bg-rose-100 text-rose-700",   meaning: "High workload risk",   range: "30h+ meetings or 3+ after-hours" },
+      ],
+    },
+    {
+      title: "Gmail Activity",
+      icon: <Mail size={13} className="text-red-400" />,
+      rows: [
+        { signal: "NORMAL",      color: "bg-emerald-100 text-emerald-700", meaning: "Healthy communication",  range: "< 40 emails sent this week" },
+        { signal: "ELEVATED",    color: "bg-amber-100 text-amber-700",     meaning: "Slightly high volume",   range: "40–80 emails or 2 after-hours" },
+        { signal: "HIGH VOLUME", color: "bg-rose-100 text-rose-700",       meaning: "Communication stress",   range: "80+ emails or 5+ after-hours" },
+      ],
+    },
+    {
+      title: "Work Behaviour",
+      icon: <Monitor size={13} className="text-violet-500" />,
+      rows: [
+        { signal: "HIGH",   color: "bg-emerald-100 text-emerald-700", meaning: "Highly engaged",      range: "Active ratio > 70%, few idle spikes" },
+        { signal: "MEDIUM", color: "bg-amber-100 text-amber-700",     meaning: "Moderate engagement", range: "Active ratio 45–70%" },
+        { signal: "LOW",    color: "bg-rose-100 text-rose-700",       meaning: "Low engagement",      range: "Active ratio < 45% or many idle spikes" },
+      ],
+    },
+    {
+      title: "BrainUp In-App",
+      icon: <BrainCircuit size={13} className="text-cyan-500" />,
+      rows: [
+        { signal: "GOOD",    color: "bg-emerald-100 text-emerald-700", meaning: "Positive emotional state", range: "Mood avg 3.5–5.0" },
+        { signal: "WARNING", color: "bg-amber-100 text-amber-700",     meaning: "Needs monitoring",         range: "Mood avg 2.5–3.5" },
+        { signal: "AT RISK", color: "bg-rose-100 text-rose-700",       meaning: "Concerning signals",       range: "Mood avg below 2.5" },
+      ],
+    },
+  ];
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+      {/* Toggle header */}
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 transition-colors"
+      >
+        <div className="flex items-center gap-2 text-sm font-bold text-slate-600">
+          <Info size={15} className="text-cyan-500" />
+          Signal Indicator Guide
+        </div>
+        <ChevronDown size={15} className={`text-slate-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {/* Collapsible content */}
+      {open && (
+        <div className="border-t border-slate-100 p-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {sections.map(section => (
+              <div key={section.title} className="space-y-2">
+                {/* Section header */}
+                <div className="flex items-center gap-2 font-bold text-slate-700 text-xs uppercase tracking-wide">
+                  {section.icon}
+                  {section.title}
+                </div>
+                {/* Rows */}
+                <div className="rounded-xl overflow-hidden border border-slate-100">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-slate-50">
+                        <th className="text-left py-2 px-3 font-bold text-slate-400 w-24">Signal</th>
+                        <th className="text-left py-2 px-3 font-bold text-slate-400">Meaning</th>
+                        <th className="text-left py-2 px-3 font-bold text-slate-400">Range</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {section.rows.map(row => (
+                        <tr key={row.signal}>
+                          <td className="py-2 px-3">
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${row.color}`}>
+                              {row.signal}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-slate-600 font-medium">{row.meaning}</td>
+                          <td className="py-2 px-3 text-slate-400">{row.range}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Overall score legend */}
+          <div className="mt-5 space-y-2">
+            <div className="flex items-center gap-2 font-bold text-slate-700 text-xs uppercase tracking-wide">
+              <BrainCircuit size={13} className="text-slate-400" />
+              Overall Risk Score (weighted average of all 4 sources)
+            </div>
+            <div className="rounded-xl overflow-hidden border border-slate-100">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-slate-50">
+                    <th className="text-left py-2 px-3 font-bold text-slate-400 w-36">Risk Level</th>
+                    <th className="text-left py-2 px-3 font-bold text-slate-400">Score Range</th>
+                    <th className="text-left py-2 px-3 font-bold text-slate-400">What it means</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {[
+                    { level: "THRIVING",         color: "bg-emerald-100 text-emerald-700", range: "75–100", meaning: "Employee is doing well across all signals" },
+                    { level: "MONITOR",           color: "bg-amber-100 text-amber-700",     range: "50–74",  meaning: "Some signals need watching, not urgent" },
+                    { level: "NEEDS ATTENTION",   color: "bg-orange-100 text-orange-700",   range: "25–49",  meaning: "Multiple signals declining, HR should reach out" },
+                    { level: "CRITICAL",          color: "bg-rose-100 text-rose-700",       range: "0–24",   meaning: "Significant risk, immediate HR intervention needed" },
+                  ].map(row => (
+                    <tr key={row.level}>
+                      <td className="py-2 px-3">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${row.color}`}>
+                          {row.level}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 text-slate-600 font-medium">{row.range}</td>
+                      <td className="py-2 px-3 text-slate-400">{row.meaning}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Team Overview Table ──────────────────────────────────────────────────────
 function TeamOverview({ employees, onSelect, refreshing, onRefresh, lastRefreshed }: {
   employees: TeamEmployee[]; onSelect: (id: string) => void;
@@ -449,10 +587,14 @@ function TeamOverview({ employees, onSelect, refreshing, onRefresh, lastRefreshe
         )}
       </div>
 
+            {/* Signal Legend */}
+      <SignalLegend />
+
       <p className="text-xs text-slate-400 text-center">
         Scores weighted equally: Calendar 25% · Gmail 25% · In-App 25% · Work Behaviour 25%
         · — = data not available · Auto-refreshes every 5 seconds
       </p>
+
     </div>
   );
 }
