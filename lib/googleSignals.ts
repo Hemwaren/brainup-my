@@ -165,8 +165,9 @@ export async function fetchCalendarSignals(
     // After hours = before 9am or after 6pm
     function countAfterHours(events: any[]): number {
       return events.filter(e => {
-        const hour = new Date(e.start.dateTime).getHours();
-        return hour < 9 || hour >= 18;
+        const d = new Date(e.start.dateTime);
+        const hourMYT = (d.getUTCHours() + 8) % 24;
+        return hourMYT < 9 || hourMYT >= 18;
       }).length;
     }
 
@@ -315,8 +316,9 @@ export async function fetchGmailSignals(
         if (!dateHeader) continue;
 
         const sentDate = new Date(dateHeader.value);
-        const hour = sentDate.getHours();
-        if (hour < 9 || hour >= 18) afterHoursCount++;
+        // Use Malaysia time (UTC+8)
+        const hourMYT = (sentDate.getUTCHours() + 8) % 24;
+        if (hourMYT < 9 || hourMYT >= 18) afterHoursCount++;
 
         // Simple response time: internalDate vs received estimate
         if (msg.internalDate) {
