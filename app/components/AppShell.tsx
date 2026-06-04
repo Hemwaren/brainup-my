@@ -342,7 +342,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
       if (e.key === "brainup_avatar" && e.newValue) {
         setProfile(prev => prev ? { ...prev, avatar_url: e.newValue } : prev);
       }
-    }
+    } 
     function handleAvatarUpdate(e: Event) {
       const url = (e as CustomEvent).detail;
       if (url) setProfile(prev => prev ? { ...prev, avatar_url: url } : prev);
