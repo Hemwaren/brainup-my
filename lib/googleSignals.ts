@@ -95,7 +95,7 @@ export async function fetchCalendarSignals(
     back_to_back_meetings: 0,
     focus_time_ratio: 1,
     signal: "NO_DATA",
-    score: 50,
+    score: 0,
   };
 
   const token = await getValidToken(userId);
@@ -238,7 +238,7 @@ export async function fetchGmailSignals(
     avg_response_time_hours: 0,
     volume_delta: 0,
     signal: "NO_DATA",
-    score: 50,
+    score: 0,
   };
 
   const token = await getValidToken(userId);

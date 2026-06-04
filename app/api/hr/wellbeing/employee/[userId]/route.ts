@@ -152,7 +152,7 @@ export async function GET(
             back_to_back_meetings: 0,
             focus_time_ratio: 1,
             signal: "NO_DATA" as const,
-            score: 50,
+            score: 0,
           }),
       googleConnected
         ? fetchGmailSignals(userId)
@@ -163,7 +163,7 @@ export async function GET(
             avg_response_time_hours: 0,
             volume_delta: 0,
             signal: "NO_DATA" as const,
-            score: 50,
+            score: 0,
           }),
     ]);
 
@@ -212,7 +212,7 @@ export async function GET(
     const latestEI = eiData[0];
     const prevEI = eiData[1];
     const eiDelta = latestEI && prevEI
-      ? latestEI.overall_score - prevEI.overall_score : 0;
+      ? Math.round((latestEI.overall_score - prevEI.overall_score) * 10) / 10 : 0;
     const eiSignal =
       !latestEI ? "NO_DATA"
       : eiDelta > 0 ? "GROWING"

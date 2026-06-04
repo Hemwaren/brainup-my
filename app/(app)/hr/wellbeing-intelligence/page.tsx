@@ -744,7 +744,7 @@ function EmployeeDeepDive({ userId, onBack, onActionDone }: {
               <p className="text-slate-400 mb-0.5">EI Score</p>
               <p className="font-extrabold text-slate-800 text-base">
                 {signals.inapp.ei.latest_score ? Math.round(signals.inapp.ei.latest_score) : "—"}
-                {signals.inapp.ei.delta !== 0 && <span className={`text-xs ml-1 ${signals.inapp.ei.delta > 0 ? "text-emerald-500" : "text-rose-500"}`}>{signals.inapp.ei.delta > 0 ? "+" : ""}{signals.inapp.ei.delta}</span>}
+                {signals.inapp.ei.delta !== 0 && <span className={`text-xs ml-1 ${signals.inapp.ei.delta > 0 ? "text-emerald-500" : "text-rose-500"}`}>{signals.inapp.ei.delta > 0 ? "+" : ""}{Math.round(signals.inapp.ei.delta * 10) / 10}</span>}
               </p>
             </div>
           </div>
