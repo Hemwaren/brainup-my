@@ -750,15 +750,7 @@ export default function StatsPage() {
           </div>
         </section>
 
-        {/* Leaderboard */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center gap-2">
-            <Users size={15} className="text-cyan-500" />
-            <span className="text-sm font-extrabold text-slate-900">Company Leaderboard</span>
-            <div className="ml-auto h-2 w-2 rounded-full bg-teal-400 animate-pulse" />
-          </div>
-          <Leaderboard entries={leaderboard} loading={leaderboardLoading} />
-        </section>
+        
 
         {/* Journey Roadmap */}
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
