@@ -367,13 +367,13 @@ function AppShell({ children }: { children: React.ReactNode }) {
           async () => {
             const { data: p } = await supabase
               .from("profiles")
-              .select("full_name, role, department, joined_at, avatar_url")
+              .select("full_name, role, department, avatar_url")
               .eq("id", userId!)
               .maybeSingle();
             if (p) {
               setProfile(prev => prev ? {
                 ...prev,
-                avatar_url: p.avatar_url ? `${p.avatar_url}?t=${Date.now()}` : null,
+                 avatar_url: p.avatar_url ?? null,
                 full_name: p.full_name ?? prev.full_name,
               } : prev);
             }
@@ -462,7 +462,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
       try {
         const { data: p } = await supabase
           .from("profiles")
-          .select("full_name, role, department, joined_at, avatar_url")
+          .select("full_name, role, department, avatar_url")
           .eq("id", u.id)
           .maybeSingle();
         dbProfile = p || null;
@@ -480,7 +480,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
       const role: AppRole = (dbProfile?.role ?? md?.role ?? "EMPLOYEE") as AppRole;
       const deptRaw = (dbProfile?.department ?? md?.department ?? md?.dept ?? "") as string;
       const department = String(role).toUpperCase() === "HR" ? "Human Resources" : deptRaw || "—";
-      const joined_at = (dbProfile?.joined_at ?? md?.joined_at ?? u.created_at ?? new Date().toISOString()) as string;
+      const joined_at = (md?.joined_at ?? u.created_at ?? new Date().toISOString()) as string;
       const full_name = (dbProfile?.full_name ?? md?.full_name ?? md?.name ?? "User") as string;
       const dbAvatar = (dbProfile?.avatar_url ?? md?.avatar_url ?? null) as string | null;
       const cachedAvatar = localStorage.getItem("brainup_avatar");
