@@ -592,7 +592,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
       <div className="mx-3 mb-3 rounded-2xl border border-slate-100 bg-slate-50 p-3">
         <div className="flex items-center gap-3">
           {profile.avatar_url ? (
-            <img src={`${profile.avatar_url}?t=${Date.now()}`} alt="avatar" className="h-9 w-9 rounded-xl object-cover shrink-0" />
+            <img src={profile.avatar_url} alt="avatar" className="h-9 w-9 rounded-xl object-cover shrink-0" />
           ) : (
             <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white text-xs font-extrabold">
               {profile.full_name.charAt(0).toUpperCase()}
@@ -797,7 +797,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
                   className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 hover:bg-slate-50 transition"
                   onClick={() => router.push("/profile")}>
                   {profile.avatar_url ? (
-                    <img src={`${profile.avatar_url}?t=${Date.now()}`} alt="avatar" className="h-7 w-7 rounded-lg object-cover" />
+                    <img src={profile.avatar_url} alt="avatar" className="h-7 w-7 rounded-lg object-cover" />
                   ) : (
                     <div className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-br from-teal-400 via-cyan-400 to-sky-400 text-white text-xs font-extrabold">
                       {profile.full_name.charAt(0).toUpperCase()}
